@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SteelSync-Opt: AI-Based Port-to-Plant Logistics Optimization Engine for the steel industry. Optimize vessel scheduling, rail transport, and inventory management.">
+    <title>SteelSync-Opt | AI Port-to-Plant Logistics</title>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/charts.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <link rel="stylesheet" href="css/data-input.css">
+    <link rel="stylesheet" href="css/vessel-planning.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+
+    <!-- jsLPSolver for MILP -->
+    <script src="https://unpkg.com/javascript-lp-solver/dist/solver.global.js"></script>
+
+    <!-- Favicon (inline SVG as data URI) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗️</text></svg>">
+</head>
+<body>
+    <div class="app-layout">
+
+        <!-- ═══════════════════════════════════════════════════
+             SIDEBAR NAVIGATION
+             ═══════════════════════════════════════════════════ -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">S</div>
+                <div class="sidebar-brand">
+                    <span class="sidebar-brand-name">SteelSync-Opt</span>
+                    <span class="sidebar-brand-sub">Logistics AI Engine</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Main</div>
+                    <div class="nav-item" data-panel="datainput">
+                        <span class="nav-icon">📂</span>
+                        <span class="nav-label">Data Input</span>
+                    </div>
+                    <div class="nav-item active" data-panel="overview">
+                        <span class="nav-icon">📊</span>
+                        <span class="nav-label">Dashboard</span>
+                    </div>
+                    <div class="nav-item" data-panel="vessels">
+                        <span class="nav-icon">🚢</span>
+                        <span class="nav-label">Vessel Tracker</span>
+                        <span class="nav-badge" id="delayedBadge"></span>
+                    </div>
+                    <div class="nav-item" data-panel="vesselplan">
+                        <span class="nav-icon">⚓</span>
+                        <span class="nav-label">Vessel Planning</span>
+                    </div>
+                    <div class="nav-item" data-panel="inventory">
+                        <span class="nav-icon">📦</span>
+                        <span class="nav-label">Inventory</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Intelligence</div>
+                    <div class="nav-item" data-panel="predictions">
+                        <span class="nav-icon">🤖</span>
+                        <span class="nav-label">ML Predictions</span>
+                    </div>
+                    <div class="nav-item" data-panel="costs">
+                        <span class="nav-icon">💰</span>
+                        <span class="nav-label">Cost Analytics</span>
+                    </div>
+                    <div class="nav-item" data-panel="whatif">
+                        <span class="nav-icon">🔮</span>
+                        <span class="nav-label">What-If Sim</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Actions</div>
+                    <div class="nav-item" id="presentationBtn">
+                        <span class="nav-icon">🎬</span>
+                        <span class="nav-label">Presentation</span>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <span class="status-dot pulse-glow"></span>
+                <span>System Operational</span>
+            </div>
+        </aside>
+
+        <!-- ═══════════════════════════════════════════════════
+             MAIN CONTENT AREA
+             ═══════════════════════════════════════════════════ -->
+        <main class="main-content">
+
+            <!-- ── DATA INPUT PANEL ─────────────────────────── -->
+            <section class="panel" id="panel-datainput">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">Data Input</h1>
+                        <p class="page-subtitle">Upload data or design your supply chain network</p>
+                    </div>
+                </div>
+                <div id="dataInputContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── OVERVIEW PANEL ─────────────────────────── -->
+            <section class="panel active" id="panel-overview">
+                <div class="page-header" id="overviewHeader"></div>
+
+                <div class="kpi-grid stagger-children" id="kpiGrid">
+                    <!-- KPI cards rendered dynamically -->
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Cost Breakdown Doughnut -->
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="card-title">Cost Breakdown</span>
+                                <p class="card-subtitle">Optimized logistics cost distribution</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="costDoughnutChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Vessel Timeline -->
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="card-title">Vessel Timeline</span>
+                                <p class="card-subtitle">ETA schedule with predicted delays</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="vesselTimelineChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Inventory Projection -->
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="card-title">Inventory Projection</span>
+                                <p class="card-subtitle">30-day stock forecast — Bhilai Plant</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="inventoryAreaChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Cost Trend -->
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="card-title">Cost Trend</span>
+                                <p class="card-subtitle">Optimized vs. baseline over 30 days</p>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="costTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Supply Reliability Gauge -->
+                <div class="card" style="max-width:280px;margin:0 auto;text-align:center">
+                    <h4 class="card-title" style="margin-bottom:12px">Supply Reliability</h4>
+                    <div id="reliabilityGauge"></div>
+                </div>
+            </section>
+
+            <!-- ── VESSELS PANEL ──────────────────────────── -->
+            <section class="panel" id="panel-vessels">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">Vessel Tracker</h1>
+                        <p class="page-subtitle">Real-time vessel monitoring with AI delay predictions</p>
+                    </div>
+                </div>
+                <div class="card" id="vesselTrackerContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── VESSEL PLANNING PANEL ───────────────────── -->
+            <section class="panel" id="panel-vesselplan">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">Vessel Planning</h1>
+                        <p class="page-subtitle">Plan vessel discharge and optimize rail routes to plants</p>
+                    </div>
+                </div>
+                <div id="vesselPlanContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── INVENTORY PANEL ────────────────────────── -->
+            <section class="panel" id="panel-inventory">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">Inventory Management</h1>
+                        <p class="page-subtitle">Plant-wise material stock levels and projections</p>
+                    </div>
+                </div>
+                <div id="inventoryContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── PREDICTIONS PANEL ──────────────────────── -->
+            <section class="panel" id="panel-predictions">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">ML Predictions</h1>
+                        <p class="page-subtitle">Random Forest delay prediction model analysis</p>
+                    </div>
+                </div>
+                <div id="predictionsContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── COST ANALYTICS PANEL ───────────────────── -->
+            <section class="panel" id="panel-costs">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">Cost Analytics</h1>
+                        <p class="page-subtitle">MILP optimization results and cost breakdown</p>
+                    </div>
+                </div>
+                <div class="card" id="costAnalyticsContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+            <!-- ── WHAT-IF PANEL ──────────────────────────── -->
+            <section class="panel" id="panel-whatif">
+                <div class="page-header">
+                    <div class="page-header-left">
+                        <h1 class="page-title">What-If Simulation</h1>
+                        <p class="page-subtitle">Scenario-based disruption analysis with instant re-optimization</p>
+                    </div>
+                </div>
+                <div class="card" id="whatifContent">
+                    <!-- Rendered dynamically -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PRESENTATION MODE OVERLAY
+         ═══════════════════════════════════════════════════════ -->
+    <div class="presentation-overlay" id="presentationOverlay">
+        <div class="presentation-slide" id="presentationSlideContent">
+            <!-- Slides rendered dynamically -->
+        </div>
+        <div class="presentation-controls">
+            <button class="btn btn-ghost" onclick="prevSlide()">← Previous</button>
+            <span class="slide-counter" id="slideCounter">1 / 5</span>
+            <button class="btn btn-primary" onclick="nextSlide()">Next →</button>
+            <button class="btn btn-ghost btn-sm" onclick="togglePresentation()" style="margin-left:12px">✕ Close</button>
+        </div>
+    </div>
+
+    <!-- Application Script (ES Modules) -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
