@@ -4,6 +4,7 @@
 
 import { parseUploadedFile, generateTemplate } from '../utils/excel-parser.js';
 import { NetworkWhiteboard } from './whiteboard.js';
+import { apiUpload } from '../utils/api.js';
 
 let whiteboard = null;
 let currentView = 'input'; // 'input' | 'whiteboard' | 'preview'
@@ -174,6 +175,12 @@ async function handleFileUpload(file, container, onDataApply) {
         if (statusText) statusText.textContent = 'Parsing data...';
 
         const parsed = await parseUploadedFile(file);
+
+        // Upload to backend
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', parsed.type);
+        await apiUpload('/api/data/upload', formData);
 
         await new Promise(r => setTimeout(r, 300));
         if (progressBar) progressBar.style.width = '100%';

@@ -3,16 +3,24 @@
 // ============================================================
 
 import { SCENARIO_TYPES, runSimulation, getScenarioSummary } from '../engines/simulation.js';
-import { formatINR, formatPercent } from '../utils/formatters.js';
+import { predictor } from '../engines/prediction.js';
+import { formatINR } from '../utils/formatters.js';
 import { PORTS, PLANTS } from '../data/constants.js';
 
 let activeScenario = null;
 let scenarioParams = {};
 
+// Helper to get names safely
+const getPortName = (id) => PORTS.find(p => p.id === id)?.name || id || 'Unknown Port';
+const getPlantName = (id) => PLANTS.find(p => p.id === id)?.name || id || 'Unknown Plant';
+
 /**
  * Render what-if simulation panel
  */
 export function renderWhatIfPanel(container, data, baselineResults) {
+    if (!container) return;
+    
+    // Initial Render
     container.innerHTML = `
         <div class="card-header">
             <div>
@@ -49,32 +57,80 @@ export function renderWhatIfPanel(container, data, baselineResults) {
         </div>
     `;
 
-    // Bind scenario selection
-    container.querySelectorAll('.scenario-card').forEach(card => {
-        card.addEventListener('click', () => {
+    // --- EVENT DELEGATION (SINGLE BINDING) ---
+    // Remove existing to prevent duplication if container persists
+    if (container._whatIfBound) return;
+    container._whatIfBound = true;
+
+    container.addEventListener('click', async (ev) => {
+        // Scenario Selection
+        const card = ev.target.closest('.scenario-card');
+        if (card) {
             activeScenario = card.dataset.scenario;
             scenarioParams = {};
             renderWhatIfPanel(container, data, baselineResults);
-        });
+            return;
+        }
+
+        // Run Simulation
+        const btn = ev.target.closest('#runSimulationBtn');
+        if (btn) {
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading-spinner"></span> Running...';
+                
+                const result = executeSimulation(activeScenario, data, baselineResults);
+                const out = container.querySelector('#simulationOutput');
+                if (out) renderSimulationResults(out, result);
+
+                // System of Record Flow: Save to DB
+                await persistSimulationResult(activeScenario, scenarioParams, result);
+
+                // Dispatch completion events
+                window.dispatchEvent(new CustomEvent('simulationSaved', { detail: { result } }));
+                window.dispatchEvent(new CustomEvent('simulationCompleted', {
+                    detail: {
+                        comparison: result,
+                        modelTrained: !!(predictor && predictor.trained),
+                    }
+                }));
+            } catch (err) {
+                console.error('[What-If] run error', err);
+                const out = container.querySelector('#simulationOutput');
+                if (out) out.innerHTML = `<div class="alert alert-error">Simulation failed: ${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '⚡ Run Simulation';
+            }
+        }
     });
 
-    // Bind run button
-    const runBtn = container.querySelector('#runSimulationBtn');
-    if (runBtn) {
-        runBtn.addEventListener('click', () => {
-            const result = executeSimulation(activeScenario, data, baselineResults);
-            renderSimulationResults(container.querySelector('#simulationOutput'), result);
+    container.addEventListener('input', (ev) => {
+        const input = ev.target.closest('[data-param]');
+        if (input) {
+            scenarioParams[input.dataset.param] = input.type === 'range' ? parseFloat(input.value) : input.value;
+            const display = container.querySelector(`#paramDisplay_${input.dataset.param}`);
+            if (display) display.textContent = input.value;
+        }
+    });
+}
+
+async function persistSimulationResult(scenarioId, params, result) {
+    try {
+        await fetch('/api/simulation/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                scenarioType: scenarioId,
+                inputParams: params,
+                originalCost: result.baseline?.totalCost || 0,
+                newCost: result.scenario?.totalCost || 0,
+                meta: { scenarioSummary: getScenarioSummary(result) }
+            })
         });
+    } catch (err) {
+        console.warn('[What-If] Failed to persist simulation', err);
     }
-
-    // Bind param inputs
-    container.querySelectorAll('[data-param]').forEach(input => {
-        input.addEventListener('input', (e) => {
-            scenarioParams[e.target.dataset.param] = e.target.type === 'range' ? parseFloat(e.target.value) : e.target.value;
-            const display = container.querySelector(`#paramDisplay_${e.target.dataset.param}`);
-            if (display) display.textContent = e.target.value;
-        });
-    });
 }
 
 function renderScenarioConfig(scenarioId, data) {
@@ -94,15 +150,22 @@ function renderScenarioConfig(scenarioId, data) {
             `;
             if (!scenarioParams[param.key]) scenarioParams[param.key] = data.vessels[0]?.id;
         } else if (param.type === 'rake-select') {
+            const rakeOptions = (data.rakes || []).map(r => {
+                const fromName = getPortName(r.fromPort || r.from);
+                const toName = getPlantName(r.toPlant || r.to);
+                const label = `${r.rakeNumber || r.id || 'RK'} (${fromName} → ${toName})`;
+                return `<option value="${r.id}" ${scenarioParams[param.key] === r.id ? 'selected' : ''}>${label}</option>`;
+            }).join('');
+
             paramsHtml += `
                 <div class="form-group">
                     <label class="form-label">${param.label}</label>
                     <select class="form-select" data-param="${param.key}">
-                        ${data.rakes.map(r => `<option value="${r.id}">${r.rakeNumber} (${r.fromPortName} → ${r.toPlantName})</option>`).join('')}
+                        ${rakeOptions || '<option disabled>No active rakes found</option>'}
                     </select>
                 </div>
             `;
-            if (!scenarioParams[param.key]) scenarioParams[param.key] = data.rakes[0]?.id;
+            if (!scenarioParams[param.key] && data.rakes?.length) scenarioParams[param.key] = data.rakes[0].id;
         } else if (param.type === 'plant-select') {
             paramsHtml += `
                 <div class="form-group">
@@ -125,11 +188,13 @@ function renderScenarioConfig(scenarioId, data) {
             if (!scenarioParams[param.key]) scenarioParams[param.key] = PORTS[0]?.id;
         } else if (param.type === 'range') {
             const defaultVal = param.default;
-            scenarioParams[param.key] = scenarioParams[param.key] || defaultVal;
+            const currentVal = scenarioParams[param.key] !== undefined ? scenarioParams[param.key] : defaultVal;
+            scenarioParams[param.key] = currentVal;
+            
             paramsHtml += `
                 <div class="form-group">
-                    <label class="form-label">${param.label}: <span id="paramDisplay_${param.key}" class="mono" style="color:var(--accent-primary)">${defaultVal}</span></label>
-                    <input type="range" data-param="${param.key}" min="${param.min}" max="${param.max}" step="${param.step}" value="${defaultVal}">
+                    <label class="form-label">${param.label}: <span id="paramDisplay_${param.key}" class="mono" style="color:var(--accent-primary)">${currentVal}</span></label>
+                    <input type="range" data-param="${param.key}" min="${param.min}" max="${param.max}" step="${param.step}" value="${currentVal}">
                 </div>
             `;
         }
@@ -145,9 +210,11 @@ function renderScenarioConfig(scenarioId, data) {
                 </div>
             </div>
 
-            ${paramsHtml}
+            <div class="scenario-params-grid">
+                ${paramsHtml}
+            </div>
 
-            <button class="btn btn-primary" id="runSimulationBtn" style="width:100%;justify-content:center;margin-top:8px">
+            <button class="btn btn-primary" id="runSimulationBtn" style="width:100%;justify-content:center;margin-top:16px">
                 ⚡ Run Simulation
             </button>
 
@@ -157,11 +224,12 @@ function renderScenarioConfig(scenarioId, data) {
 }
 
 function executeSimulation(scenarioId, data, baselineResults) {
-    const scenario = {
+    if (!scenarioId) throw new Error('No scenario selected');
+    const simulationScenario = {
         type: scenarioId,
         params: { ...scenarioParams },
     };
-    return runSimulation(scenario, data, baselineResults);
+    return runSimulation(simulationScenario, data, baselineResults);
 }
 
 function renderSimulationResults(container, comparison) {
@@ -174,11 +242,11 @@ function renderSimulationResults(container, comparison) {
     const changeIcon = isIncrease ? '📈' : '📉';
 
     container.innerHTML = `
-        <div style="padding:16px;border-radius:var(--radius-md);background:var(--bg-card);border:1px solid var(--border-primary)">
+        <div class="simulation-result-card animate-slide-up">
             <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">${changeIcon} Simulation Results</h4>
 
-            <div style="padding:12px;border-radius:var(--radius-md);background:${isIncrease ? 'rgba(var(--accent-danger-rgb),0.06)' : 'rgba(var(--accent-success-rgb),0.06)'};border:1px solid ${isIncrease ? 'rgba(var(--accent-danger-rgb),0.15)' : 'rgba(var(--accent-success-rgb),0.15)'};margin-bottom:16px">
-                <p style="font-size:0.82rem;color:var(--text-secondary)">${summary}</p>
+            <div class="simulation-summary-box" style="background:${isIncrease ? 'rgba(var(--accent-danger-rgb),0.06)' : 'rgba(var(--accent-success-rgb),0.06)'}">
+                <p>${summary}</p>
             </div>
 
             <div class="impact-grid">
@@ -198,13 +266,19 @@ function renderSimulationResults(container, comparison) {
                     <div class="impact-value" style="color:${impact.demurrageChange > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'}">
                         ${impact.demurrageChange > 0 ? '+' : ''}${formatINR(impact.demurrageChange, true)}
                     </div>
-                    <div class="impact-label">Demurrage Impact</div>
+                    <div class="impact-label">Demurrage</div>
                 </div>
                 <div class="impact-card">
                     <div class="impact-value" style="color:${impact.railChange > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'}">
                         ${impact.railChange > 0 ? '+' : ''}${formatINR(impact.railChange, true)}
                     </div>
-                    <div class="impact-label">Rail Cost Impact</div>
+                    <div class="impact-label">Rail Impact</div>
+                </div>
+                <div class="impact-card">
+                    <div class="impact-value" style="color:var(--accent-danger)">
+                        ${impact.penaltyChange > 0 ? '+' : ''}${formatINR(impact.penaltyChange, true)}
+                    </div>
+                    <div class="impact-label">Penalties & Fees</div>
                 </div>
             </div>
         </div>

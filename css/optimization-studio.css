@@ -1,0 +1,32 @@
+.opt-card {
+    background: #1e1e2d;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-primary);
+}
+
+.opt-card h3 {
+    margin-top: 0;
+    color: var(--text-secondary);
+}
+
+.constraint-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e1e2d;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.constraint-group input {
+    background: #333;
+    color: #fff;
+    border: none;
+    padding: 8px;
+    border-radius: 4px;
+    text-align: right;
+    width: 120px;
+}

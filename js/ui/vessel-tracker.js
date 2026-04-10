@@ -10,12 +10,13 @@ import { formatDate, formatDateTime, formatTons, formatINR, formatDuration, getS
 export function renderVesselTracker(container, vessels, predictions) {
     const delayed = vessels.filter(v => v.status === 'delayed').length;
     const inTransit = vessels.filter(v => v.status === 'in-transit').length;
+    const booked = vessels.filter(v => v.planned).length;
 
     container.innerHTML = `
         <div class="card-header">
             <div>
                 <h3 class="card-title">Vessel Tracker</h3>
-                <p class="card-subtitle">${vessels.length} vessels • ${delayed} delayed • ${inTransit} in transit</p>
+                <p class="card-subtitle">${vessels.length} vessels • ${booked > 0 ? `<span style="color:var(--accent-success);font-weight:700">${booked} booked</span> • ` : ''}${delayed} delayed • ${inTransit} in transit</p>
             </div>
             <div class="download-bar">
                 <button class="btn btn-ghost btn-sm" id="downloadVesselsCSV">📥 CSV</button>
@@ -41,45 +42,49 @@ export function renderVesselTracker(container, vessels, predictions) {
                 <tbody>
                     ${vessels.map((v, i) => {
                         const pred = predictions[i];
-                        const delayClass = v.delayHours > 24 ? 'style="color: var(--accent-danger)"' :
-                            v.delayHours > 6 ? 'style="color: var(--accent-warning)"' :
+                        const delayHours = Number(v.delayHours) || 0;
+                        const delayClass = delayHours > 24 ? 'style="color: var(--accent-danger)"' :
+                            delayHours > 6 ? 'style="color: var(--accent-warning)"' :
                             'style="color: var(--accent-success)"';
+                        const isBooked = !!v.planned;
+                        const eta = v.scheduledETA ? new Date(v.scheduledETA) : null;
+                        const etaStr = eta ? formatDateTime(eta) : '—';
                         return `
-                        <tr>
+                        <tr style="${isBooked ? 'background:rgba(16,185,129,0.04);border-left:3px solid #10b981' : ''}">
                             <td>
                                 <div style="display:flex;align-items:center;gap:10px">
                                     <span style="font-size:1.2rem">🚢</span>
                                     <div>
-                                        <div style="font-weight:600;color:var(--text-primary)">${v.name}</div>
-                                        <div style="font-size:0.68rem;color:var(--text-muted)">Age: ${v.vesselAge}y</div>
+                                        <div style="font-weight:600;color:var(--text-primary)">${v.name || 'Unknown Vessel'}</div>
+                                        <div style="font-size:0.68rem;color:var(--text-muted)">Age: ${v.vesselAge || '—'}y${isBooked ? ' &nbsp;<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:1px 5px;border-radius:8px;font-size:0.6rem;font-weight:700">📋 BOOKED</span>' : ''}</div>
                                     </div>
                                 </div>
                             </td>
                             <td>
-                                <div>${v.origin}</div>
-                                <div style="font-size:0.68rem;color:var(--text-muted)">${v.originCountry}</div>
+                                <div>${v.origin || '—'}</div>
+                                <div style="font-size:0.68rem;color:var(--text-muted)">${v.originCountry || ''}</div>
                             </td>
-                            <td>${v.destinationPortName}</td>
+                            <td>${v.destinationPortName || v.destinationPort || '—'}</td>
                             <td>
                                 <span style="display:inline-flex;align-items:center;gap:4px">
                                     <span style="width:8px;height:8px;border-radius:50%;background:${getMaterialColor(v.material)}"></span>
-                                    ${v.materialName}
+                                    ${v.materialName || v.material || '—'}
                                 </span>
                             </td>
-                            <td class="mono">${formatTons(v.quantity)}</td>
-                            <td class="mono" style="font-size:0.78rem">${formatDateTime(v.scheduledETA)}</td>
+                            <td class="mono">${v.quantity ? formatTons(v.quantity) : '—'}</td>
+                            <td class="mono" style="font-size:0.78rem">${etaStr}</td>
                             <td>
                                 <span class="mono" ${delayClass}>
-                                    ${v.delayHours > 0 ? '+' : ''}${formatDuration(Math.abs(v.delayHours))}
+                                    ${delayHours > 0 ? '+' : ''}${formatDuration(Math.abs(delayHours))}
                                 </span>
                                 ${pred ? `
                                     <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">
-                                        AI: ${pred.predictedDelay > 0 ? '+' : ''}${pred.predictedDelay}h
-                                        (${Math.round(pred.confidence * 100)}% conf.)
+                                        AI: ${(pred.predictedDelay || 0) > 0 ? '+' : ''}${pred.predictedDelay || 0}h
+                                        (${Math.round((pred.confidence || 0) * 100)}% conf.)
                                     </div>
                                 ` : ''}
                             </td>
-                            <td><span class="status-badge ${getStatusClass(v.status)}">${getStatusText(v.status)}</span></td>
+                            <td><span class="status-badge ${getStatusClass(v.status || 'berthed')}">${getStatusText(v.status || 'berthed')}</span></td>
                             <td class="mono">${v.berthAssigned ? `B-${v.berthAssigned}` : '—'}</td>
                         </tr>`;
                     }).join('')}

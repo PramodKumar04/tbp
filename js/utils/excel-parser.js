@@ -67,25 +67,71 @@ function parseCSVLine(line) {
 }
 
 /**
- * Parse uploaded file (CSV or Excel-as-CSV)
+ * Dynamically load SheetJS (XLSX) from CDN if not already present.
+ * Returns a promise that resolves with the XLSX global.
  */
-export function parseUploadedFile(file) {
+function loadXLSX() {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const text = e.target.result;
-                const data = parseCSV(text);
-                const parsed = interpretData(data);
-                resolve(parsed);
-            } catch (err) {
-                reject(new Error('Failed to parse file: ' + err.message));
+        if (typeof window.XLSX !== 'undefined') {
+            resolve(window.XLSX);
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+        script.onload = () => {
+            if (typeof window.XLSX !== 'undefined') {
+                resolve(window.XLSX);
+            } else {
+                reject(new Error('SheetJS failed to load after script injection'));
             }
         };
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsText(file);
+        script.onerror = () => reject(new Error('Failed to load SheetJS from CDN'));
+        document.head.appendChild(script);
     });
 }
+
+/**
+ * Parse uploaded file (CSV or Excel)
+ */
+export async function parseUploadedFile(file) {
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+        const XLSX = await loadXLSX();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                    resolve(interpretData(rows));
+                } catch (err) {
+                    reject(new Error('Failed to parse Excel: ' + err.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsArrayBuffer(file);
+        });
+    } else {
+        // CSV — no external library needed
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const rows = parseCSV(e.target.result);
+                    resolve(interpretData(rows));
+                } catch (err) {
+                    reject(new Error('Failed to parse CSV: ' + err.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+}
+
 
 /**
  * Interpret parsed CSV rows into app data structures

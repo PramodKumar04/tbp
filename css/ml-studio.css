@@ -1,0 +1,76 @@
+.wizard-container {
+    display: flex;
+    gap: 30px;
+    height: 100%;
+}
+
+.wizard-sidebar {
+    width: 250px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border-primary);
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.wizard-step {
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.wizard-step:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.wizard-step.active {
+    background: var(--accent-primary);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.wizard-content {
+    flex: 1;
+    background: var(--bg-card);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+.step-pane {
+    display: none;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.step-pane.active {
+    display: block;
+}
+
+.file-drop-zone {
+    border: 2px dashed var(--border-primary);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.2s;
+    margin: 20px 0;
+}
+
+.file-drop-zone:hover {
+    border-color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.file-drop-zone .drop-icon {
+    font-size: 3rem;
+    margin-bottom: 20px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}

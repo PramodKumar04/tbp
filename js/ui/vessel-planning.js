@@ -4,6 +4,7 @@
 // Multi-step wizard: Select Vessel → Configure Discharge → Optimize Route
 
 import { PORTS, PLANTS, RAIL_ROUTES, COST_PARAMS, MATERIALS } from '../data/constants.js';
+import { apiFetch } from '../utils/api.js';
 
 let _vessels = [];
 let _selectedVessel = null;
@@ -488,27 +489,84 @@ function _bindEvents() {
     });
 
     // Confirm Plan
-    _container.querySelector('#vpConfirmBtn')?.addEventListener('click', () => {
+    _container.querySelector('#vpConfirmBtn')?.addEventListener('click', async () => {
         if (!_selectedRoute || !_selectedVessel) return;
+
+        const btn = _container.querySelector('#vpConfirmBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
+
+        const v = _selectedVessel;
+        const port = PORTS.find(p => p.id === _planConfig.portId);
+        const plant = PLANTS.find(p => p.id === _planConfig.plantId);
+        const handlingCost = Math.round((port?.handlingCost || 300) * v.quantity);
+        const railCost = _selectedRoute.cost * v.quantity;
+        const totalCost = handlingCost + railCost;
+
         const plan = {
-            vessel: _selectedVessel,
-            port: PORTS.find(p => p.id === _planConfig.portId),
-            plant: PLANTS.find(p => p.id === _planConfig.plantId),
+            vessel: v,
+            port,
+            plant,
             rakes: _planConfig.rakes,
             route: _selectedRoute,
             objective: _planConfig.objective,
         };
-        console.log('[VesselPlanning] Plan confirmed:', plan);
-        if (_onPlanConfirmed) _onPlanConfirmed(plan);
 
-        // Show success toast
-        const toast = document.createElement('div');
-        toast.className = 'notification notification-success';
-        toast.textContent = `✓ Plan confirmed for ${_selectedVessel.name} via Route #${_selectedRoute.routeId}`;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3500);
+        // --- 🟢 Persist full vessel snapshot via authenticated API ---
+        try {
+            const resp = await apiFetch('/api/vessels/plans', {
+                method: 'POST',
+                body: JSON.stringify({
+                    // Vessel identity
+                    vesselId: v.id,
+                    vesselName: v.name,
+                    origin: v.origin,
+                    originCountry: v.originCountry,
+                    destinationPort: port?.id || v.destinationPort,
+                    destinationPortName: port?.name || v.destinationPortName,
+                    material: v.material,
+                    materialName: v.materialName,
+                    quantity: v.quantity,
+                    vesselAge: v.vesselAge,
+                    scheduledETA: v.scheduledETA,
+                    actualETA: v.actualETA,
+                    delayHours: v.delayHours || 0,
+                    status: 'berthed',
+                    berthAssigned: v.berthAssigned || 1,
+                    freightCost: v.freightCost || 0,
+                    // Plan details
+                    portId: port?.id || '',
+                    plantId: plant?.id || '',
+                    route: _selectedRoute,
+                    rakes: _planConfig.rakes,
+                    cost: totalCost,
+                    cargo: { quantity: v.quantity, material: v.material }
+                })
+            });
 
-        // Reset
+            if (resp && resp.ok) {
+                // 🔔 Notify the Vessel Tracker to refresh with the booked vessel
+                window.dispatchEvent(new CustomEvent('vesselPlanSaved', { detail: plan }));
+
+                // Show success toast
+                const toast = document.createElement('div');
+                toast.className = 'notification notification-success';
+                toast.textContent = `✅ ${v.name} booked via Route #${_selectedRoute.routeId} — reflected in Vessel Tracker`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 4000);
+            } else {
+                const err = await resp?.json();
+                throw new Error(err?.error || 'Save failed');
+            }
+        } catch (err) {
+            console.error('[VesselPlanning] Save error:', err);
+            const toast = document.createElement('div');
+            toast.className = 'notification notification-error';
+            toast.textContent = `❌ Failed to save plan: ${err.message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // Reset wizard
         _selectedVessel = null;
         _step = 'select';
         _selectedRoute = null;

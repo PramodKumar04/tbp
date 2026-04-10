@@ -1,5 +1,5 @@
 // ============================================================
-// SteelSync-Opt — Main Application Controller
+// BharatSupply — Main Application Controller
 // ============================================================
 
 import { generateAllData, generateInventoryProjection } from './data/synthetic-data.js';
@@ -8,7 +8,7 @@ import { optimizeLogistics } from './engines/optimizer.js';
 import { renderKPIs, renderPageHeader, updateTimestamp } from './ui/dashboard.js';
 import {
     renderCostDoughnut, renderVesselTimeline, renderInventoryChart,
-    renderDelayScatter, renderCostTrend, renderReliabilityGauge,
+    renderReliabilityGauge,
 } from './ui/charts.js';
 import { renderVesselTracker } from './ui/vessel-tracker.js';
 import { renderInventoryPanel } from './ui/inventory.js';
@@ -16,497 +16,449 @@ import { renderCostAnalytics } from './ui/cost-analytics.js';
 import { renderWhatIfPanel } from './ui/what-if.js';
 import { renderDataInput } from './ui/data-input.js';
 import { renderVesselPlanning } from './ui/vessel-planning.js';
-import { APP_CONFIG } from './data/constants.js';
+import { APP_CONFIG, PORTS, PLANTS, MATERIALS } from './data/constants.js';
+import { renderMLStudioPanel } from './ui/ml-studio.js';
+import { renderOptimizerPanel } from './ui/optimization-studio.js';
+import { auth } from './auth.js';
+import { apiFetch } from './utils/api.js';
+import { renderLandingView } from './ui/landing-view.js';
+import { renderDashboardView } from './ui/dashboard-view.js';
+import { renderPredictionsPanel } from './ui/ml-predictions.js';
 
 // ── Application State ────────────────────────────────────
-let appData = null;
-let optimizationResult = null;
-let predictions = [];
+let appData = { vessels: [], rakes: [], inventory: {} };
+let dashboardSummary = { 
+    totalCost: 0, optimizedCost: 0, 
+    costBreakdown: { freight: 0, portHandling: 0, railTransport: 0, demurrage: 0, storage: 0 },
+    savings: { totalSaved: 0, percentSaved: 0 }
+};
 let currentPanel = 'overview';
+let activePredictions = [];
+let bookedVessels = []; // Vessels explicitly planned & saved via Vessel Planning wizard
 
-// ── Presentation Mode State ──────────────────────────────
-let presentationActive = false;
-let currentSlide = 0;
-const slides = [
-    {
-        title: 'Welcome to SteelSync-Opt',
-        subtitle: 'AI-Based Port-to-Plant Logistics Optimization Engine',
-        content: `
-            <div style="text-align:center;padding:20px 0">
-                <div style="font-size:4rem;margin-bottom:20px">🏗️</div>
-                <h2 style="font-size:1.8rem;margin-bottom:12px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">SteelSync-Opt</h2>
-                <p style="font-size:1.1rem;color:#94a3b8;max-width:600px;margin:0 auto">
-                    An AI-driven logistics optimization system for the steel industry, targeting the movement of raw materials from ports to steel plants.
-                </p>
-                <div style="display:flex;gap:24px;justify-content:center;margin-top:32px;flex-wrap:wrap">
-                    <div style="text-align:center">
-                        <div style="font-size:2rem;font-weight:700;color:#3b82f6">12%</div>
-                        <div style="font-size:0.75rem;color:#64748b">Cost Reduction</div>
-                    </div>
-                    <div style="text-align:center">
-                        <div style="font-size:2rem;font-weight:700;color:#10b981">28%</div>
-                        <div style="font-size:0.75rem;color:#64748b">Less Demurrage</div>
-                    </div>
-                    <div style="text-align:center">
-                        <div style="font-size:2rem;font-weight:700;color:#8b5cf6">15%</div>
-                        <div style="font-size:0.75rem;color:#64748b">Better Reliability</div>
-                    </div>
-                </div>
-            </div>
-        `,
-    },
-    {
-        title: 'The Problem',
-        subtitle: 'Current logistics challenges in steel industry',
-        content: `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                <div style="padding:20px;border-radius:12px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15)">
-                    <div style="font-size:1.3rem;margin-bottom:8px">📧</div>
-                    <h4 style="font-size:0.95rem;margin-bottom:6px">Manual ETA Tracking</h4>
-                    <p style="font-size:0.8rem;color:#94a3b8">Vessel ETAs received via emails/fax. Updates inconsistent and not real-time.</p>
-                </div>
-                <div style="padding:20px;border-radius:12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15)">
-                    <div style="font-size:1.3rem;margin-bottom:8px">📊</div>
-                    <h4 style="font-size:0.95rem;margin-bottom:6px">Excel-Based Planning</h4>
-                    <p style="font-size:0.8rem;color:#94a3b8">All operations handled using spreadsheets. Manual data entry across teams.</p>
-                </div>
-                <div style="padding:20px;border-radius:12px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15)">
-                    <div style="font-size:1.3rem;margin-bottom:8px">⚠️</div>
-                    <h4 style="font-size:0.95rem;margin-bottom:6px">Human Error Risk</h4>
-                    <p style="font-size:0.8rem;color:#94a3b8">A single wrong entry can lead to demurrage costs and production disruptions.</p>
-                </div>
-                <div style="padding:20px;border-radius:12px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
-                    <div style="font-size:1.3rem;margin-bottom:8px">🔗</div>
-                    <h4 style="font-size:0.95rem;margin-bottom:6px">Poor Coordination</h4>
-                    <p style="font-size:0.8rem;color:#94a3b8">Data inconsistencies across departments. No real-time visibility.</p>
-                </div>
-            </div>
-        `,
-    },
-    {
-        title: 'Our Solution',
-        subtitle: 'AI-powered logistics optimization pipeline',
-        content: `
-            <div style="display:flex;flex-direction:column;gap:12px">
-                <div style="display:flex;align-items:center;gap:16px;padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#06b6d4);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">1</div>
-                    <div>
-                        <h4 style="font-size:0.92rem">Predictive Intelligence</h4>
-                        <p style="font-size:0.78rem;color:#94a3b8">Random Forest ML model predicts vessel and train delays</p>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">2</div>
-                    <div>
-                        <h4 style="font-size:0.92rem">MILP Optimization Engine</h4>
-                        <p style="font-size:0.78rem;color:#94a3b8">Mixed-Integer Linear Programming with Branch-and-Bound</p>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#10b981,#06b6d4);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">3</div>
-                    <div>
-                        <h4 style="font-size:0.92rem">What-If Simulation</h4>
-                        <p style="font-size:0.78rem;color:#94a3b8">Test disruption scenarios and instantly recalculate impact</p>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">4</div>
-                    <div>
-                        <h4 style="font-size:0.92rem">Real-Time Dashboard</h4>
-                        <p style="font-size:0.78rem;color:#94a3b8">Visualize logistics flow, costs, and actionable insights</p>
-                    </div>
-                </div>
-            </div>
-        `,
-    },
-    {
-        title: 'Mathematical Model',
-        subtitle: 'MILP Objective Function & Constraints',
-        content: `
-            <div style="font-family:'JetBrains Mono',monospace;padding:20px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary);margin-bottom:16px">
-                <div style="color:#8b5cf6;font-size:0.78rem;margin-bottom:8px">OBJECTIVE FUNCTION</div>
-                <div style="font-size:0.92rem;color:#f1f5f9">
-                    Minimize Z = Σ(freight<sub>v</sub> × q<sub>v</sub>) + Σ(handling<sub>p</sub> × q<sub>p</sub>) + Σ(rail<sub>r</sub> × d<sub>r</sub> × q<sub>r</sub>) + Σ(demurrage<sub>v</sub> × delay<sub>v</sub>)
-                </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div style="padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="font-size:0.72rem;color:#06b6d4;font-weight:600;margin-bottom:6px">CONSTRAINT 1</div>
-                    <div style="font-size:0.82rem">Inventory Balance</div>
-                    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px">inv[t] = inv[t-1] + unloaded[t] − railed[t]</div>
-                </div>
-                <div style="padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="font-size:0.72rem;color:#10b981;font-weight:600;margin-bottom:6px">CONSTRAINT 2</div>
-                    <div style="font-size:0.82rem">Sequential Unloading</div>
-                    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px">One vessel per berth at any time t</div>
-                </div>
-                <div style="padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="font-size:0.72rem;color:#f59e0b;font-weight:600;margin-bottom:6px">CONSTRAINT 3</div>
-                    <div style="font-size:0.82rem">Rail Capacity</div>
-                    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px">rail[r][t] ≤ rake_capacity × max_rakes</div>
-                </div>
-                <div style="padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-primary)">
-                    <div style="font-size:0.72rem;color:#ef4444;font-weight:600;margin-bottom:6px">CONSTRAINT 4</div>
-                    <div style="font-size:0.82rem">Demand Satisfaction</div>
-                    <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px">Σ rail[t] ≥ plant_demand over horizon</div>
-                </div>
-            </div>
-        `,
-    },
-    {
-        title: 'Expected Outcomes',
-        subtitle: 'Measurable improvements from AI optimization',
-        content: `
-            <div style="text-align:center;padding:20px 0">
-                <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:32px">
-                    <div style="padding:28px 36px;border-radius:16px;background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(6,182,212,0.1));border:1px solid rgba(59,130,246,0.2)">
-                        <div style="font-size:3rem;font-weight:800;color:#3b82f6;font-family:'JetBrains Mono',monospace">12%</div>
-                        <div style="font-size:0.85rem;color:#94a3b8;margin-top:4px">Logistics Cost Reduction</div>
-                    </div>
-                    <div style="padding:28px 36px;border-radius:16px;background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(6,182,212,0.1));border:1px solid rgba(16,185,129,0.2)">
-                        <div style="font-size:3rem;font-weight:800;color:#10b981;font-family:'JetBrains Mono',monospace">28%</div>
-                        <div style="font-size:0.85rem;color:#94a3b8;margin-top:4px">Demurrage Reduction</div>
-                    </div>
-                    <div style="padding:28px 36px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(236,72,153,0.1));border:1px solid rgba(139,92,246,0.2)">
-                        <div style="font-size:3rem;font-weight:800;color:#8b5cf6;font-family:'JetBrains Mono',monospace">15%</div>
-                        <div style="font-size:0.85rem;color:#94a3b8;margin-top:4px">Supply Reliability Gain</div>
-                    </div>
-                </div>
-                <p style="font-size:0.92rem;color:#94a3b8;max-width:500px;margin:0 auto">
-                    These improvements lead to better production planning, reduced operational risk, and increased profitability.
-                </p>
-            </div>
-        `,
-    },
-];
+/**
+ * Initialize Application
+ */
+export async function initApp() {
+    const root = document.getElementById('app-root');
+    if (!root) return;
+    
+    if (!auth.isAuthenticated()) {
+        renderLandingView(root);
+        return;
+    }
 
-// ── Initialize Application ───────────────────────────────
-export function initApp() {
-    console.log('[SteelSync-Opt] Initializing...');
+    renderDashboardView(root);
+    console.log('[BharatSupply] Initializing Control Tower...');
 
-    // 1. Generate data
-    appData = generateAllData();
-    console.log(`[Data] Generated ${appData.vessels.length} vessels, ${appData.rakes.length} rakes`);
+    // 1. Load Data & ML Model
+    // Load saved ML model from backend
+    try {
+        const mlRes = await apiFetch('/api/ml/load');
+        if (mlRes && mlRes.ok) {
+            const mlData = await mlRes.json();
+            if (mlData) {
+                predictor.deserialize(mlData);
+                console.log('[App] ML Model reloaded from persistence');
+            }
+        }
+    } catch (e) {
+        console.warn('[App] No persisted ML model found or failed to load');
+    }
 
-    // 2. Train prediction model
-    predictor.train(appData.historicalData, 7);
-
-    // 3. Run predictions for all vessels
-    predictions = appData.vessels.map(v => predictor.predictVesselDelay(v));
-    console.log('[Predictions] Vessel delay predictions complete');
-
-    // 4. Run optimization
-    optimizationResult = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
-    console.log(`[Optimizer] Total cost: ₹${Math.round(optimizationResult.totalCost).toLocaleString()}`);
-
-    // 5. Setup navigation
-    setupNavigation();
-
-    // 6. Render initial view
+    await loadAppData();
+    await Promise.all([
+        refreshDashboardSummary(),
+        loadBookedVessels()   // Load user-specific booked vessels from Vessel Planning
+    ]);
     switchPanel('overview');
 
-    // 7. Update timestamp periodically
+    // 2. Initial Optimization (System of Record Flow)
+    await runInitialOptimization();
+
+    // 3. Final Dashboard Refresh
+    await refreshDashboardSummary();
+
+    setupNavigation();
+    switchPanel('overview');
+
+    // 4. Background Refresh Cycles
     setInterval(updateTimestamp, 1000);
+    setInterval(refreshDashboardSummary, APP_CONFIG.refreshInterval || 30000);
 
-    // 8. Setup presentation mode
-    setupPresentation();
+    // 5. Global Event Listeners
+    window.addEventListener('simulationSaved', () => refreshDashboardSummary());
+    window.addEventListener('optimizationSaved', () => refreshDashboardSummary());
 
-    console.log('[SteelSync-Opt] Ready ✓');
+    // 🟢 When a vessel is booked in Vessel Planning, fetch updated list and refresh tracker
+    window.addEventListener('vesselPlanSaved', async (e) => {
+        // Optimistic update: immediately add the just-booked vessel to the tracker
+        const plan = e.detail;
+        if (plan && plan.vessel) {
+            const optimisticVessel = {
+                ...plan.vessel,
+                planned: true,
+                status: 'berthed',
+                berthAssigned: plan.vessel.berthAssigned || 1,
+                planRoute: plan.route,
+            };
+            // Avoid duplicates
+            if (!bookedVessels.find(v => v.id === optimisticVessel.id)) {
+                bookedVessels = [optimisticVessel, ...bookedVessels];
+            }
+        }
+
+        // Then sync from DB (authoritative)
+        await loadBookedVessels();
+
+        // Re-render tracker if visible
+        if (currentPanel === 'vessels') {
+            switchPanel('vessels');
+        }
+    });
+    
+    document.getElementById('logoutBtn')?.addEventListener('click', () => auth.logout());
 }
 
-// ── Navigation ───────────────────────────────────────────
+async function loadAppData() {
+    try {
+        const [rakeRes, invRes, vesselRes] = await Promise.all([
+            apiFetch('/api/data/demand_rakes'),
+            apiFetch('/api/data/inventory'),
+            apiFetch('/api/data/vessels')
+        ]);
+
+        const rakes = await rakeRes.json();
+        const inv = await invRes.json();
+        const vessels = await vesselRes.json();
+
+        if (!rakes.data?.length || !vessels.data?.length) {
+            console.warn('[App] Backend data empty, using synthetic fallback');
+            appData = generateAllData();
+        } else {
+            appData = {
+                rakes: rakes.data[0].data,
+                vessels: vessels.data[0].data,
+                inventory: mapInventory(inv.data[0]?.data || []),
+                isLive: true
+            };
+            normalizeAppData();
+        }
+        appData.inventoryProjection = generateInventoryProjection(appData.inventory, appData.rakes);
+    } catch (err) {
+        console.error('[App] Load failed', err);
+        appData = generateAllData();
+    }
+}
+
+async function tryLoadMLModel() {
+    try {
+        const res = await apiFetch('/api/ml/load');
+        if (res.ok) {
+            const weights = await res.json();
+            predictor.deserialize(weights);
+            console.log('[App] ML Model loaded from DB');
+        }
+    } catch (e) {
+        console.warn('[App] Model load failed, using heuristic defaults');
+    }
+}
+
+/**
+ * Load vessels that were explicitly booked via the Vessel Planning wizard.
+ * These are user-specific (JWT scoped) and shown EXCLUSIVELY in the Vessel Tracker.
+ */
+async function loadBookedVessels() {
+    try {
+        const res = await apiFetch('/api/vessels/plans');
+        if (res && res.ok) {
+            const result = await res.json();
+            const plans = result.data || [];
+
+            // Cross-reference with live appData to fill missing fields for old records
+            bookedVessels = plans.map(plan => {
+                // Detect old/incomplete record: name is missing, generic, or starts with 'Vessel '
+                const hasFullData = plan.name && 
+                    !plan.name.startsWith('Vessel ') && 
+                    plan.origin && plan.origin !== 'International';
+
+                if (hasFullData) return plan; // New record — all data is present
+
+                // Try to find the matching vessel in live data by ID
+                const liveVessel = appData.vessels && appData.vessels.find(v => v.id === plan.id);
+                if (liveVessel) {
+                    // Merge: live vessel provides identity/timing data, plan provides booking info
+                    return {
+                        ...liveVessel,
+                        planned: true,
+                        planRoute: plan.planRoute || plan.route || {},
+                        planCost: plan.planCost || plan.cost || 0,
+                        planTimestamp: plan.planTimestamp,
+                        // Override status to 'berthed' since it was booked
+                        status: 'berthed',
+                        berthAssigned: liveVessel.berthAssigned || plan.berthAssigned || 1,
+                    };
+                }
+
+                // Return the DB plan as-is even if partial (will show with fallbacks)
+                return { ...plan, planned: true };
+            });
+
+            console.log(`[App] Loaded ${bookedVessels.length} booked vessels (${bookedVessels.filter(v => v.name && !v.name.startsWith('Vessel')).length} with full data)`);
+        }
+    } catch (e) {
+        console.warn('[App] Failed to load booked vessels:', e);
+        bookedVessels = [];
+    }
+}
+
+async function runInitialOptimization() {
+    if (!appData) return;
+    
+    // 1. Check if a baseline optimization already exists for this user
+    try {
+        const res = await apiFetch('/api/optimizations');
+        const result = await res.json();
+        
+        if (result.count > 0 || result.data?.length > 0) {
+            console.log('[App] Baseline optimization found, skipping initial run.');
+            return;
+        }
+    } catch (e) {
+        console.warn('[App] Failed to check for existing optimization');
+    }
+
+    // 2. Only if no existing optimization, run a fresh one and save it
+    console.log('[App] No baseline optimization found, running initial...');
+    const result = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
+    
+    try {
+        await apiFetch('/api/optimizations', {
+            method: 'POST',
+            body: JSON.stringify({
+                totalCost: result.totalCost,
+                costBreakdown: result.costBreakdown,
+                vesselSchedule: result.vesselSchedule,
+                railPlan: result.railPlan,
+                savings: result.savings,
+                meta: { isInitialBaseline: true }
+            })
+        });
+    } catch (e) {
+        console.warn('[App] Failed to save initial optimization:', e);
+    }
+}
+
+async function refreshDashboardSummary() {
+    try {
+        const res = await apiFetch('/api/dashboard/summary');
+        dashboardSummary = await res.json();
+        
+        // Update live predictions from ML model
+        if (appData?.vessels) {
+            activePredictions = appData.vessels.map(v => {
+                try { return predictor.predictVesselDelay(v); }
+                catch { return { predictedDelay: 0, confidence: 0, factors: [] }; }
+            });
+        }
+
+        // Always re-render the overview panel with fresh data
+        renderOverviewPanel();
+        updateTimestamp();
+
+        // Signal that dashboard data is fresh (optimizer studio waits for this)
+        window.dispatchEvent(new CustomEvent('dashboardRefreshed', { detail: dashboardSummary }));
+    } catch (err) {
+        console.warn('[App] Summary refresh failed', err);
+        // Still signal so optimizer doesn't hang
+        window.dispatchEvent(new CustomEvent('dashboardRefreshed', { detail: dashboardSummary }));
+    }
+}
+
+function mapInventory(raw) {
+    const structured = {};
+    raw.forEach(row => {
+        const p = row.plant || 'bhilai';
+        const m = row.material || 'coal';
+        if (!structured[p]) structured[p] = {};
+        structured[p][m] = {
+            currentLevel: parseFloat(row.currentLevel || 50000),
+            safetyStock: parseFloat(row.safetyStock || 20000),
+            dailyConsumption: parseFloat(row.dailyConsumption || 3500),
+            status: 'healthy'
+        };
+    });
+    return structured;
+}
+
+function normalizeAppData() {
+    appData.vessels = appData.vessels.map(v => ({
+        ...v,
+        destinationPortName: v.destinationPortName || PORTS.find(p => p.id === v.destinationPort)?.name || 'Unknown',
+        materialName: v.materialName || MATERIALS.find(m => m.id === v.material)?.name || 'Unknown',
+        actualETA: new Date(v.actualETA || v.scheduledETA)
+    }));
+}
+
+export function switchPanel(panelId) {
+    currentPanel = panelId;
+    
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(el => el.classList.toggle('active', el.dataset.panel === panelId));
+    
+    const panels = document.querySelectorAll('.panel');
+    panels.forEach(panel => panel.classList.toggle('active', panel.id === `panel-${panelId}`));
+
+    const contentIdMap = {
+        overview: 'overview',
+        vessels: 'vesselTrackerContent',
+        inventory: 'inventoryContent',
+        costs: 'costAnalyticsContent',
+        whatif: 'whatifContent',
+        predictions: 'predictionsContent',
+        datainput: 'dataInputContent',
+        vesselplan: 'vesselPlanContent',
+        mlstudio: 'mlStudioContent',
+        optimizer: 'optimizerStudioContent'
+    };
+
+    const containerId = contentIdMap[panelId] || panelId;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    switch (panelId) {
+        case 'overview': {
+            renderOverviewPanel(); 
+            break;
+        }
+        case 'vessels': {
+            // Merge: booked vessels at top (marked), then remaining live vessels
+            const bookedIds = new Set(bookedVessels.map(v => v.id));
+            const unbookedVessels = appData.vessels.filter(v => !bookedIds.has(v.id));
+            
+            // Tag booked vessels so tracker can highlight them
+            const taggedBooked = bookedVessels.map(v => ({ ...v, planned: true }));
+            const allVessels = [...taggedBooked, ...unbookedVessels];
+
+            const predictions = allVessels.map(v => {
+                if (predictor && predictor.trained) {
+                    try { return predictor.predictVesselDelay(v); } catch(e) {}
+                }
+                return { predictedDelay: v.delayHours || 0, confidence: 0.75, factors: [] };
+            });
+
+            renderVesselTracker(container, allVessels, predictions);
+            break;
+        }
+        case 'inventory': {
+            renderInventoryPanel(container, appData.inventory); 
+            break;
+        }
+        case 'costs': {
+            renderCostAnalytics(container, dashboardSummary); 
+            break;
+        }
+        case 'whatif': {
+            const whatIfData = {
+                ...appData,
+                vessels: bookedVessels.length > 0 ? bookedVessels : (dashboardSummary.activeRoutes || appData.vessels),
+                rakes: dashboardSummary.activeRakes || appData.rakes
+            };
+            renderWhatIfPanel(container, whatIfData, dashboardSummary); 
+            break;
+        }
+        case 'predictions': {
+            renderPredictionsPanel(appData.vessels, activePredictions); 
+            break;
+        }
+        case 'datainput': {
+            renderDataInput(container, () => {
+                loadAppData().then(() => refreshDashboardSummary());
+            }); 
+            break;
+        }
+        case 'vesselplan': {
+            renderVesselPlanning(container, appData.vessels); 
+            break;
+        }
+        case 'mlstudio': {
+            renderMLStudioPanel(appData.vessels); 
+            break;
+        }
+        case 'optimizer': {
+            renderOptimizerPanel(); 
+            break;
+        }
+    }
+}
+
+function renderOverviewPanel() {
+    const header = document.getElementById('overviewHeader');
+    const kpis = document.getElementById('kpiGrid');
+    if (!header || !kpis) return;
+
+    renderPageHeader(header, 'Supply Chain Control Tower', 'AI-driven real-time optimization & risk management');
+    
+    // Add Active ML Constraints indicator
+    const mlConstraints = predictor.getConstraints();
+    if (mlConstraints) {
+        const constraintsHeader = document.createElement('div');
+        constraintsHeader.className = 'ml-constraints-banner animate-fade-in';
+        constraintsHeader.innerHTML = `
+            <span class="ml-badge">🤖 AI Constraints Active</span>
+            <span class="ml-rule">Monsoon Penalty: 1.45x</span>
+            <span class="ml-rule">Weather Risk: 1.3x</span>
+            <span class="ml-rule">Min Confidence: 85%</span>
+        `;
+        header.appendChild(constraintsHeader);
+    }
+
+    renderKPIs(kpis, dashboardSummary);
+    
+    setTimeout(() => {
+        // 1. Cost Doughnut — needs costBreakdown object (not entire summaryData)
+        const cb = dashboardSummary.costBreakdown || {};
+        renderCostDoughnut('costDoughnutChart', cb);
+
+        // 2. Vessel Timeline — prefer optimized schedule, fallback to raw vessels
+        const timelineVessels = (dashboardSummary.activeRoutes && dashboardSummary.activeRoutes.length > 0)
+            ? dashboardSummary.activeRoutes.map(v => ({
+                name: v.vessel || v.name || 'Unknown',
+                scheduledETA: v.eta || v.scheduledETA || new Date(),
+                actualETA: v.eta || v.actualETA || new Date(),
+                delayHours: v.delayHours || 0,
+                status: v.assigned ? 'berthed' : 'in-transit',
+            }))
+            : (appData.vessels || []);
+        renderVesselTimeline('vesselTimelineChart', timelineVessels);
+
+        // 3. Inventory — always from live projection
+        renderInventoryChart('inventoryAreaChart', appData.inventoryProjection || {});
+
+        // 4. Reliability gauge — use stored value from DB
+        const reliability = dashboardSummary.savings?.supplyReliability ?? 85;
+        renderReliabilityGauge('reliabilityGauge', reliability);
+    }, 100);
+}
+
 function setupNavigation() {
-    document.querySelectorAll('.nav-item[data-panel]').forEach(item => {
+    document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', () => {
-            const panel = item.dataset.panel;
-            switchPanel(panel);
+            if (item.dataset.panel) {
+                switchPanel(item.dataset.panel);
+            }
         });
     });
 }
 
-function switchPanel(panelId) {
-    currentPanel = panelId;
-
-    // Update nav active state
-    document.querySelectorAll('.nav-item[data-panel]').forEach(item => {
-        item.classList.toggle('active', item.dataset.panel === panelId);
-    });
-
-    // Hide all panels, show active
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    const panel = document.getElementById(`panel-${panelId}`);
-    if (panel) panel.classList.add('active');
-
-    // Render panel content
-    renderPanel(panelId);
+export function showNotification(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type} animate-slide-up`;
+    toast.innerHTML = `<div class="toast-message">${message}</div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
 }
 
-function renderPanel(panelId) {
-    switch (panelId) {
-        case 'datainput':
-            renderDataInputPanel();
-            break;
-        case 'overview':
-            renderOverview();
-            break;
-        case 'vessels':
-            renderVesselsPanel();
-            break;
-        case 'inventory':
-            renderInventoryView();
-            break;
-        case 'costs':
-            renderCostsPanel();
-            break;
-        case 'whatif':
-            renderWhatIfView();
-            break;
-        case 'predictions':
-            renderPredictionsPanel();
-            break;
-        case 'vesselplan':
-            renderVesselPlanPanel();
-            break;
-    }
-}
-
-// ── Panel Renderers ──────────────────────────────────────
-function renderDataInputPanel() {
-    renderDataInput(document.getElementById('dataInputContent'), (uploadedData) => {
-        console.log('[Data Input] User data applied:', uploadedData.type);
-        
-        // Merge uploaded data into appData based on type
-        if (uploadedData.type === 'vessels') {
-            appData.vessels = uploadedData.data;
-        } else if (uploadedData.type === 'rakes') {
-            appData.rakes = uploadedData.data;
-        } else if (uploadedData.type === 'inventory') {
-            appData.inventory = uploadedData.data;
-        }
-        
-        // Regenerate inventory projection if rakes or inventory were updated
-        if (uploadedData.type === 'rakes' || uploadedData.type === 'inventory') {
-            if (appData.inventory && appData.rakes) {
-                appData.inventoryProjection = generateInventoryProjection(appData.inventory, appData.rakes);
-            }
-        }
-        
-        // Re-run optimization and prediction with the new data
-        optimizationResult = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
-        predictions = appData.vessels.map(v => predictor.predictVesselDelay(v));
-
-        // Show notification
-        const notif = document.createElement('div');
-        notif.className = 'notification notification-success';
-        notif.textContent = '✓ Data applied! Dashboard updated with real-world inputs.';
-        document.body.appendChild(notif);
-        setTimeout(() => notif.remove(), 3500);
-
-        // Switch to dashboard
-        switchPanel('overview');
-    });
-}
-
-function renderOverview() {
-    // Header
-    renderPageHeader(
-        document.getElementById('overviewHeader'),
-        'Dashboard Overview',
-        'AI-optimized port-to-plant logistics monitoring'
-    );
-
-    // KPIs
-    renderKPIs(document.getElementById('kpiGrid'), appData, optimizationResult);
-
-    // Charts
-    setTimeout(() => {
-        renderCostDoughnut('costDoughnutChart', optimizationResult.costBreakdown);
-        renderVesselTimeline('vesselTimelineChart', appData.vessels);
-        renderInventoryChart('inventoryAreaChart', appData.inventoryProjection);
-        renderCostTrend('costTrendChart', optimizationResult);
-
-        // Reliability gauge
-        const gaugeEl = document.getElementById('reliabilityGauge');
-        if (gaugeEl) {
-            let totalItems = 0, healthyItems = 0;
-            for (const plantId in appData.inventory) {
-                for (const matId in appData.inventory[plantId]) {
-                    totalItems++;
-                    if (appData.inventory[plantId][matId].status === 'healthy') healthyItems++;
-                }
-            }
-            renderReliabilityGauge(gaugeEl, totalItems > 0 ? healthyItems / totalItems : 0);
-        }
-    }, 100);
-}
-
-function renderVesselsPanel() {
-    renderVesselTracker(document.getElementById('vesselTrackerContent'), appData.vessels, predictions);
-}
-
-function renderInventoryView() {
-    renderInventoryPanel(document.getElementById('inventoryContent'), appData.inventory, appData.inventoryProjection);
-}
-
-function renderCostsPanel() {
-    renderCostAnalytics(document.getElementById('costAnalyticsContent'), optimizationResult);
-}
-
-function renderWhatIfView() {
-    renderWhatIfPanel(document.getElementById('whatifContent'), appData, optimizationResult);
-}
-
-function renderVesselPlanPanel() {
-    const container = document.getElementById('vesselPlanContent');
-    if (!container || !appData) return;
-    renderVesselPlanning(container, appData.vessels, (plan) => {
-        console.log('[App] Vessel plan confirmed:', plan);
-        // Re-run optimization with updated allocation
-        optimizationResult = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
-        predictions = appData.vessels.map(v => predictor.predictVesselDelay(v));
-    });
-}
-
-function renderPredictionsPanel() {
-    const container = document.getElementById('predictionsContent');
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="card-header">
-            <div>
-                <h3 class="card-title">🤖 ML Delay Predictions</h3>
-                <p class="card-subtitle">Random Forest ensemble model — 7 decision trees trained on 200 records</p>
-            </div>
-        </div>
-
-        <div class="dashboard-grid" style="margin-bottom:20px">
-            <div class="chart-card">
-                <div class="card-header">
-                    <span class="card-title">Predicted vs Actual Delays</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="predScatterChart"></canvas>
-                </div>
-            </div>
-            <div class="card" style="background:var(--bg-card)">
-                <h4 style="font-size:0.95rem;font-weight:600;margin-bottom:16px">Prediction Results</h4>
-                ${predictions.map((pred, i) => {
-                    const vessel = appData.vessels[i];
-                    if (!vessel) return '';
-                    const error = Math.abs(pred.predictedDelay - vessel.delayHours);
-                    const accuracy = error < 6 ? 'High' : error < 18 ? 'Medium' : 'Low';
-                    const accColor = error < 6 ? 'var(--accent-success)' : error < 18 ? 'var(--accent-warning)' : 'var(--accent-danger)';
-
-                    return `
-                    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-primary)">
-                        <span style="font-size:0.82rem;font-weight:550;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${vessel.name}</span>
-                        <span class="mono" style="font-size:0.78rem;color:var(--text-secondary);width:60px;text-align:right">
-                            ${pred.predictedDelay > 0 ? '+' : ''}${pred.predictedDelay}h
-                        </span>
-                        <span style="font-size:0.68rem;color:${accColor};font-weight:600;width:50px;text-align:right">${accuracy}</span>
-                        <span style="font-size:0.68rem;color:var(--text-muted);width:40px;text-align:right">${Math.round(pred.confidence * 100)}%</span>
-                    </div>`;
-                }).join('')}
-
-                <div style="margin-top:16px">
-                    <h4 style="font-size:0.82rem;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Key Delay Factors</h4>
-                    ${getTopFactors(predictions)}
-                </div>
-            </div>
-        </div>
-    `;
-
-    setTimeout(() => {
-        renderDelayScatter('predScatterChart', appData.vessels, predictions);
-    }, 100);
-}
-
-function getTopFactors(predictions) {
-    const factorCounts = {};
-    for (const pred of predictions) {
-        for (const f of pred.factors) {
-            factorCounts[f.name] = (factorCounts[f.name] || 0) + 1;
-        }
-    }
-
-    return Object.entries(factorCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([name, count]) => `
-            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
-                <span style="font-size:0.78rem;flex:1">${name}</span>
-                <span class="mono" style="font-size:0.72rem;color:var(--text-muted)">${count} vessels</span>
-            </div>
-        `).join('');
-}
-
-// ── Presentation Mode ────────────────────────────────────
-function setupPresentation() {
-    const btn = document.getElementById('presentationBtn');
-    if (btn) {
-        btn.addEventListener('click', togglePresentation);
-    }
-
-    document.addEventListener('keydown', (e) => {
-        if (!presentationActive) return;
-        if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
-        else if (e.key === 'ArrowLeft') prevSlide();
-        else if (e.key === 'Escape') togglePresentation();
-    });
-}
-
-function togglePresentation() {
-    presentationActive = !presentationActive;
-    const overlay = document.getElementById('presentationOverlay');
-    if (overlay) {
-        overlay.classList.toggle('active', presentationActive);
-        if (presentationActive) {
-            currentSlide = 0;
-            renderSlide();
-        }
-    }
-}
-
-function renderSlide() {
-    const slide = slides[currentSlide];
-    const slideEl = document.getElementById('presentationSlideContent');
-    const counterEl = document.getElementById('slideCounter');
-
-    if (slideEl) {
-        slideEl.innerHTML = `
-            <h2 style="font-size:1.8rem;font-weight:700;margin-bottom:6px;background:linear-gradient(135deg,#f1f5f9,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${slide.title}</h2>
-            <p style="font-size:0.92rem;color:#94a3b8;margin-bottom:28px">${slide.subtitle}</p>
-            ${slide.content}
-        `;
-    }
-
-    if (counterEl) {
-        counterEl.textContent = `${currentSlide + 1} / ${slides.length}`;
-    }
-}
-
-function nextSlide() {
-    if (currentSlide < slides.length - 1) {
-        currentSlide++;
-        renderSlide();
-    }
-}
-
-function prevSlide() {
-    if (currentSlide > 0) {
-        currentSlide--;
-        renderSlide();
-    }
-}
-
-// Export for global access
-window.nextSlide = nextSlide;
-window.prevSlide = prevSlide;
-window.togglePresentation = togglePresentation;
-
-// ── Auto-init ────────────────────────────────────────────
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-} else {
-    initApp();
-}
+window.switchPanel = switchPanel;
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initApp);
+else initApp();

@@ -4,6 +4,8 @@
 
 import { reOptimize } from './optimizer.js';
 import { deepClone } from '../utils/helpers.js';
+import { predictor } from './prediction.js';
+import { PORTS, RAIL_ROUTES } from '../data/constants.js';
 
 export const SCENARIO_TYPES = [
     {
@@ -20,7 +22,7 @@ export const SCENARIO_TYPES = [
         id: 'train_cancelled',
         name: 'Train Cancellation',
         icon: '🚂',
-        description: 'Cancel a scheduled rail rake',
+        description: 'Cancel a scheduled rail rake and find alternatives',
         params: [
             { key: 'rakeId', label: 'Select Rake', type: 'rake-select' },
         ],
@@ -39,7 +41,7 @@ export const SCENARIO_TYPES = [
         id: 'port_closure',
         name: 'Port Closure',
         icon: '⛔',
-        description: 'Close a port for scheduled maintenance or weather',
+        description: 'Close a port and reroute all incoming vessels',
         params: [
             { key: 'portId', label: 'Select Port', type: 'port-select' },
             { key: 'days', label: 'Closure Duration (days)', type: 'range', min: 1, max: 10, step: 1, default: 3 },
@@ -49,9 +51,9 @@ export const SCENARIO_TYPES = [
         id: 'weather_disruption',
         name: 'Weather Disruption',
         icon: '🌊',
-        description: 'Apply weather delay multiplier to all vessels',
+        description: 'Apply ML-calculated weather delays to all vessels',
         params: [
-            { key: 'multiplier', label: 'Delay Multiplier', type: 'range', min: 1.1, max: 2.0, step: 0.1, default: 1.5 },
+            { key: 'multiplier', label: 'Adversity Multiplier', type: 'range', min: 1.1, max: 2.0, step: 0.1, default: 1.5 },
         ],
     },
 ];
@@ -60,87 +62,131 @@ export const SCENARIO_TYPES = [
  * Run a what-if simulation scenario
  */
 export function runSimulation(scenario, data, baselineResults) {
-    const { type, params } = scenario;
-    let modifications = {};
-
-    switch (type) {
-        case 'vessel_delay':
-            modifications = {
-                vesselDelay: {
-                    vesselId: params.vesselId,
-                    additionalHours: params.additionalHours,
-                },
-            };
-            break;
-
-        case 'train_cancelled':
-            modifications = {
-                trainCancelled: { rakeId: params.rakeId },
-            };
-            break;
-
-        case 'demand_spike':
-            modifications = {
-                demandSpike: {
-                    plantId: params.plantId,
-                    percentIncrease: params.percentIncrease,
-                },
-            };
-            break;
-
-        case 'port_closure':
-            modifications = {
-                portClosure: {
-                    portId: params.portId,
-                    days: params.days,
-                },
-            };
-            break;
-
-        case 'weather_disruption':
-            // Apply multiplier to all vessel delays
-            modifications = {
-                weatherMultiplier: params.multiplier,
-            };
-            break;
+    // --- 🔴 PHASE 1: GUARDS ---
+    if (!data || !data.vessels) {
+        console.warn('[Simulation] Missing data, returning empty result');
+        return createFallbackResult(baselineResults);
     }
+    
+    const { type, params = {} } = scenario;
+    let modifications = { constraints: {} };
+    let explicitPenalties = 0;
 
-    // Deep clone data
+    // Get ML constraints for realism
+    const mlConstraints = predictor.getConstraints() || {};
+
+    // Deep clone data to avoid mutating application state
     const modifiedVessels = deepClone(data.vessels).map(v => {
-        v.scheduledETA = new Date(v.scheduledETA);
-        v.actualETA = new Date(v.actualETA);
+        v.scheduledETA = v.scheduledETA ? new Date(v.scheduledETA) : new Date();
+        v.actualETA = v.actualETA ? new Date(v.actualETA) : new Date(v.scheduledETA);
         return v;
     });
-    const modifiedRakes = deepClone(data.rakes).map(r => {
-        r.departure = new Date(r.departure);
-        r.arrival = new Date(r.arrival);
+    const modifiedRakes = deepClone(data.rakes || []).map(r => {
+        r.departure = r.departure ? new Date(r.departure) : new Date();
+        r.arrival = r.arrival ? new Date(r.arrival) : new Date();
         return r;
     });
-    const modifiedInventory = deepClone(data.inventory);
+    const modifiedInventory = deepClone(data.inventory || {});
 
-    // Apply weather disruption globally
-    if (type === 'weather_disruption') {
-        for (const v of modifiedVessels) {
-            const extraDelay = v.delayHours * (params.multiplier - 1);
-            v.delayHours += extraDelay;
-            v.actualETA = new Date(v.actualETA.getTime() + extraDelay * 3600000);
-            v.demurrageDays += extraDelay / 24;
+    // --- 🟢 PHASE 2: REALISTIC SCENARIO LOGIC ---
+    try {
+        switch (type) {
+            case 'vessel_delay':
+                modifications.vesselDelay = {
+                    vesselId: params.vesselId,
+                    additionalHours: parseFloat(params.additionalHours || 0),
+                };
+                // Real-world cost: penalty for delay beyond threshold
+                if (parseFloat(params.additionalHours) > 48) {
+                    explicitPenalties += 1200000; // ₹12 Lakh late arrival fee
+                }
+                break;
+
+            case 'train_cancelled':
+                const cancelledRake = modifiedRakes.find(r => r.id === params.rakeId);
+                if (cancelledRake) {
+                    modifications.trainCancelled = { rakeId: params.rakeId };
+                    // 🔴 LOSS: Emergency road transport is 250% more expensive
+                    const roadCost = (cancelledRake.totalCost || 200000) * 2.5; 
+                    explicitPenalties += roadCost;
+                    
+                    modifications.constraints.delayPenaltyMultiplier = 1.6;
+                }
+                break;
+
+            case 'demand_spike':
+                modifications.demandSpike = {
+                    plantId: params.plantId,
+                    percentIncrease: parseFloat(params.percentIncrease || 0),
+                };
+                explicitPenalties += 2500000; // Operational rush fee
+                break;
+
+            case 'port_closure':
+                modifications.portClosure = {
+                    portId: params.portId,
+                    days: parseInt(params.days || 3),
+                };
+                // 🔴 BIG LOSS: Port closure results in fixed vessel cancellation/divergence fees
+                const affectedVessels = modifiedVessels.filter(v => v.destinationPort === params.portId).length;
+                explicitPenalties += affectedVessels * 5000000; // ₹50 Lakh per vessel
+                
+                // Real-Time Rerouting: vessels for this port must go elsewhere
+                const otherPorts = PORTS.filter(p => p.id !== params.portId);
+                modifiedVessels.forEach(v => {
+                    if (v.destinationPort === params.portId) {
+                        const targetPort = otherPorts[Math.floor(Math.random() * otherPorts.length)];
+                        v.destinationPort = targetPort.id;
+                        v.delayHours = (v.delayHours || 0) + 72; // Rerouting penalty
+                        v.demurrageDays = (v.demurrageDays || 0) + (3 * (mlConstraints.weatherRiskFactor || 1));
+                    }
+                });
+                break;
+
+            case 'weather_disruption':
+                const multiplier = parseFloat(params.multiplier || 1.5);
+                explicitPenalties += 8000000; // Global weather insurance premium loss
+                
+                for (const v of modifiedVessels) {
+                    const baseExtra = predictor.trained 
+                        ? (predictor.predictVesselDelay(v).predictedDelay || 24)
+                        : (v.delayHours || 24);
+                        
+                    const extra = baseExtra * (multiplier - 1) * (mlConstraints.monsoonPenalty || 1);
+                    v.delayHours = (v.delayHours || 0) + extra;
+                    v.actualETA = new Date(v.actualETA.getTime() + extra * 3600000);
+                    v.demurrageDays = (v.demurrageDays || 0) + (extra / 24);
+                }
+                break;
         }
+    } catch (err) {
+        console.error('[Simulation] Modifier logic failed:', err);
     }
 
+    // --- 🟢 PHASE 3: RE-OPTIMIZE ---
     const optimizedResult = reOptimize(modifiedVessels, modifiedRakes, modifiedInventory, modifications);
 
-    // Compare with baseline
+    // Add explicit penalties to the final scenario cost
+    if (optimizedResult) {
+        optimizedResult.totalCost += explicitPenalties;
+        optimizedResult.costBreakdown.penalties = explicitPenalties;
+    }
+
+    // --- 🟢 PHASE 4: SAFE COMPARISON ---
+    const baseCB = baselineResults?.costBreakdown || { freight: 0, demurrage: 0, portHandling: 0, railTransport: 0 };
+    const optCB = optimizedResult?.costBreakdown || { freight: 0, demurrage: 0, portHandling: 0, railTransport: 0, penalties: 0 };
+
     const comparison = {
         baseline: baselineResults,
         scenario: optimizedResult,
         impact: {
-            costChange: optimizedResult.totalCost - baselineResults.totalCost,
-            costChangePercent: ((optimizedResult.totalCost - baselineResults.totalCost) / baselineResults.totalCost) * 100,
-            freightChange: optimizedResult.costBreakdown.freight - baselineResults.costBreakdown.freight,
-            demurrageChange: optimizedResult.costBreakdown.demurrage - baselineResults.costBreakdown.demurrage,
-            handlingChange: optimizedResult.costBreakdown.portHandling - baselineResults.costBreakdown.portHandling,
-            railChange: optimizedResult.costBreakdown.railTransport - baselineResults.costBreakdown.railTransport,
+            costChange: (optimizedResult?.totalCost || 0) - (baselineResults?.totalCost || 0),
+            costChangePercent: (baselineResults?.totalCost) ? (((optimizedResult?.totalCost || 0) - baselineResults.totalCost) / baselineResults.totalCost) * 100 : 0,
+            freightChange: (optCB.freight || 0) - (baseCB.freight || 0),
+            demurrageChange: (optCB.demurrage || 0) - (baseCB.demurrage || 0),
+            handlingChange: (optCB.portHandling || 0) - (baseCB.portHandling || 0),
+            railChange: (optCB.railTransport || 0) - (baseCB.railTransport || 0),
+            penaltyChange: (optCB.penalties || 0),
         },
         scenarioType: type,
         scenarioParams: params,
@@ -148,6 +194,16 @@ export function runSimulation(scenario, data, baselineResults) {
     };
 
     return comparison;
+}
+
+function createFallbackResult(baseline) {
+    return {
+        baseline: baseline || { totalCost: 0, costBreakdown: {} },
+        scenario: baseline || { totalCost: 0, costBreakdown: {} },
+        impact: { costChange: 0, costChangePercent: 0, demurrageChange: 0, railChange: 0 },
+        scenarioType: 'unknown',
+        simulatedAt: new Date()
+    };
 }
 
 /**
@@ -160,10 +216,10 @@ export function getScenarioSummary(comparison) {
 
     const summaries = {
         vessel_delay: `Vessel delay would cause a ${absChange}% cost ${costDir}, primarily through ${impact.demurrageChange > 0 ? 'increased demurrage charges' : 'rescheduling adjustments'}.`,
-        train_cancelled: `Train cancellation leads to a ${absChange}% cost ${costDir}. ${impact.costChange > 0 ? 'Alternative routes needed.' : 'No significant impact.'}`,
-        demand_spike: `Demand spike causes a ${absChange}% cost ${costDir}. ${impact.costChange > 0 ? 'Additional supply capacity required.' : 'Current supply adequate.'}`,
-        port_closure: `Port closure results in a ${absChange}% cost ${costDir}. ${impact.demurrageChange > 0 ? 'Significant demurrage impact expected.' : 'Manageable with rerouting.'}`,
-        weather_disruption: `Weather disruption would cause a ${absChange}% cost ${costDir} across the supply chain.`,
+        train_cancelled: `Train cancellation leads to a ${absChange}% impact. ${impact.costChange > 0 ? 'Alternate routing or road transport fallback applied.' : 'Managed with existing scheduling.'}`,
+        demand_spike: `Demand spike causes a ${absChange}% cost ${costDir}. Additional material flow optimized to prevent stock-outs.`,
+        port_closure: `Significant port closure forces rerouting, resulting in a ${absChange}% budget ${costDir}. Demurrage and rerouting costs are primary factors.`,
+        weather_disruption: `AI Predicts that weather conditions will cause a ${absChange}% cost ${costDir} across the network.`,
     };
 
     return summaries[scenarioType] || `Scenario results in a ${absChange}% cost ${costDir}.`;

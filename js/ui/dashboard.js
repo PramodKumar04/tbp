@@ -2,81 +2,55 @@
 // SteelSync-Opt — Dashboard UI Module
 // ============================================================
 
-import { formatINR, formatTons, formatPercent, formatNumber } from '../utils/formatters.js';
-import { APP_CONFIG } from '../data/constants.js';
+import { formatINR, formatPercent } from '../utils/formatters.js';
 
 /**
- * Render KPI cards
+ * Render KPI cards using Summary API data
  */
-export function renderKPIs(container, data, optimizationResult) {
-    const { vessels, rakes, inventory } = data;
-    const opt = optimizationResult;
+export function renderKPIs(container, summaryData) {
+    if (!container || !summaryData) return;
 
-    // Compute KPIs
-    const totalCost = opt?.totalCost || 0;
-    const demurrage = opt?.costBreakdown?.demurrage || 0;
-    const activeVessels = vessels.filter(v => v.status !== 'completed').length;
-    const delayedVessels = vessels.filter(v => v.status === 'delayed').length;
-    const activeRakes = rakes.filter(r => r.status === 'in-transit').length;
-
-    // Supply reliability
-    let totalItems = 0, healthyItems = 0;
-    for (const plantId in inventory) {
-        for (const matId in inventory[plantId]) {
-            totalItems++;
-            if (inventory[plantId][matId].status === 'healthy') healthyItems++;
-        }
-    }
-    const reliability = totalItems > 0 ? healthyItems / totalItems : 0;
+    const {
+        totalCost = 0,
+        optimizedCost = 1,
+        savings = 0,
+        delayedVesselsCount = 0,
+        rakeUtilization = 0,
+        planCount = 0
+    } = summaryData;
 
     const kpis = [
         {
-            label: 'Total Logistics Cost',
+            label: 'Total Logistics Budget',
             value: formatINR(totalCost, true),
             icon: '💰',
-            change: opt?.savings ? `-${opt.savings.percentSaved}%` : null,
+            change: savings > 0 ? `-${formatINR(savings, true)} saved` : null,
             changeDir: 'positive',
             type: 'kpi-primary',
         },
         {
-            label: 'Demurrage Charges',
-            value: formatINR(demurrage, true),
-            icon: '⏱️',
-            change: opt?.savings ? `-${opt.savings.demurragePercentSaved}%` : null,
-            changeDir: 'positive',
+            label: 'Optimized Cost (Latest)',
+            value: formatINR(optimizedCost, true),
+            icon: '✨',
+            change: `v${planCount} Optimization`,
+            changeDir: 'neutral',
+            type: 'kpi-purple',
+        },
+        {
+            label: 'Delayed Vessels',
+            value: delayedVesselsCount,
+            icon: '🚢',
+            change: delayedVesselsCount > 0 ? 'Urgent attention' : 'Normal Operations',
+            changeDir: delayedVesselsCount > 0 ? 'negative' : 'positive',
             type: 'kpi-danger',
         },
         {
-            label: 'Active Vessels',
-            value: activeVessels,
-            icon: '🚢',
-            change: delayedVessels > 0 ? `${delayedVessels} delayed` : 'All on time',
-            changeDir: delayedVessels > 0 ? 'negative' : 'positive',
-            type: 'kpi-warning',
-        },
-        {
-            label: 'Rakes In Transit',
-            value: activeRakes,
+            label: 'Rake Utilization',
+            value: formatPercent(rakeUtilization / 100, 0),
             icon: '🚂',
-            change: `${rakes.filter(r => r.status === 'waiting').length} scheduled`,
-            changeDir: 'neutral',
+            change: rakeUtilization > 80 ? 'Optimal' : 'Under capacity',
+            changeDir: rakeUtilization > 80 ? 'positive' : 'warning',
             type: 'kpi-cyan',
-        },
-        {
-            label: 'Supply Reliability',
-            value: formatPercent(reliability, 0),
-            icon: '📊',
-            change: 'vs 72% baseline',
-            changeDir: reliability > 0.72 ? 'positive' : 'negative',
-            type: 'kpi-success',
-        },
-        {
-            label: 'Cost Savings',
-            value: opt?.savings ? formatINR(opt.savings.totalSaved, true) : '—',
-            icon: '✨',
-            change: 'AI-optimized',
-            changeDir: 'positive',
-            type: 'kpi-purple',
         },
     ];
 
@@ -101,13 +75,14 @@ export function renderKPIs(container, data, optimizationResult) {
  * Render page header
  */
 export function renderPageHeader(container, title, subtitle) {
+    if (!container) return;
     container.innerHTML = `
         <div class="page-header-left">
             <h1 class="page-title">${title}</h1>
             <p class="page-subtitle">${subtitle}</p>
         </div>
         <div class="page-header-right">
-            <span class="live-indicator">Live</span>
+            <span class="live-indicator">Real-Time Data</span>
             <span class="last-updated" id="lastUpdated"></span>
         </div>
     `;

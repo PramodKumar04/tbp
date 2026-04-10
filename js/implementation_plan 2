@@ -1,0 +1,178 @@
+# ML Prediction Studio & MILP Optimization Engine
+
+Two major new modules for SteelSync-Opt that replace synthetic-only data flow with **user-uploaded real data** and proper production-grade optimization.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Two new sidebar panels** will be added:
+> - **🧠 ML Prediction Studio** — Upload historical data + weather input → predict delays
+> - **⚙️ Optimization Engine** — Upload FOIs/rake/SAP data + ML predictions → MILP optimization
+>
+> The existing panels (Dashboard, ML Predictions, Cost Analytics) will continue to work and will automatically use the new optimized results when available.
+
+> [!WARNING]
+> **Weather API**: For the live weather integration, I'll use a **free API** ([Open-Meteo](https://open-meteo.com/) — no API key needed). If you prefer a different provider (e.g., OpenWeatherMap requires an API key), let me know.
+
+---
+
+## Proposed Changes
+
+### Module 1: ML Prediction Studio
+
+A dedicated panel where users:
+1. **Upload historical data** (CSV/Excel with columns: `originDistance`, `seasonIdx`, `vesselAge`, `portCongestion`, `weatherScore`, `actualDelay`)
+2. **Choose weather input method**: Manual entry OR live weather API (Open-Meteo, free, no key)
+3. **Train the model** on their data
+4. **See predictions** for all current vessels with confidence scores
+5. **The predictions** feed automatically into the Optimization Engine
+
+#### [NEW] [ml-studio.js]()
+- Multi-step wizard UI:
+  - **Step 1**: Upload historical delay data (CSV/Excel) OR use synthetic data
+  - **Step 2**: Weather input — toggle between manual weather report form (wind speed, rainfall, visibility, sea state) and live weather API. API pulls from Open-Meteo for Indian port coordinates
+  - **Step 3**: Train model — visualize training progress, show accuracy metrics (MAE, RMSE, R²)
+  - **Step 4**: View predictions — table of all vessels with predicted delay, confidence, key factors, and comparison chart
+- Exports predictions as `mlPredictions` for the optimization engine
+
+#### [NEW] [weather-api.js](i dont have)
+- Integration with Open-Meteo API (free, no API key required)
+- Fetches current weather for all 4 Indian port locations (Paradip, Haldia, Vizag, Dhamra)
+- Extracts: wind speed, precipitation, wave height, visibility
+- Converts to `weatherScore` (0-1) for ML model input
+- Fallback to manual entry if API fails
+
+#### [MODIFY] [prediction.js](C:\Users\pramo\OneDrive\Desktop\tbp\tbp-logistics\js\supply_chain_logistics_data.csv)
+- Add `trainOnUserData(uploadedHistoricalData)` method
+- Add ability to accept external weather scores instead of hardcoded season-based scores
+- Add accuracy metrics calculation (MAE, RMSE, R²) with train/test split
+- Keep existing functionality as fallback
+
+---
+
+### Module 2: Optimization Engine (MILP)
+
+A dedicated panel where users:
+1. **Upload FOIs data** (Firm Order Indents — demand requirements)
+2. **Upload Rake Allotment data** (available rakes, capacity, routes)
+3. **Upload SAP data** (inventory levels, consumption rates)
+4. **ML-predicted ETAs** are automatically pulled from Module 1
+5. **Run MILP optimization** with proper constraints
+6. **View optimized plan** with cost breakdown, schedule, and Gantt chart
+
+#### [NEW] [optimization-studio.js]()
+- Multi-step wizard UI:
+  - **Step 1**: Upload FOIs (demand data — plant, material, quantity, deadline)
+  - **Step 2**: Upload Rake Allotment (available rakes, routes, capacity per date)
+  - **Step 3**: Upload SAP Data (current inventory, consumption rates)
+  - **Step 4**: ML ETA Integration — auto-populated from ML Studio with override option
+  - **Step 5**: Configure constraints — demand satisfaction, rake capacity limits, route capacity limits, delivery deadlines (editable parameters with sliders)
+  - **Step 6**: Run optimization — animated solver progress, result dashboard
+- Results view:
+  - Total optimized cost with breakdown (Transport + Handling + Delay Penalty)
+  - Optimal allocation table (which rake → which route → which plant)
+  - Gantt timeline visualization
+  - Savings comparison vs. baseline
+  - Export results to Excel
+
+#### [NEW] [milp-solver.js]()
+- Production-grade MILP formulation using jsLPSolver (already loaded via CDN)
+- **Objective Function**:
+  ```
+  Minimize Z = Σ(transport_cost[i,j] × qty[i,j]) 
+             + Σ(handling_cost[p] × qty_handled[p])
+             + Σ(delay_penalty[v] × max(0, actual_arrival[v] - deadline[v]))
+  ```
+- **Constraints**:
+  1. **Demand Satisfaction**: `Σ qty_delivered[plant,material] ≥ demand[plant,material]`
+  2. **Rake Capacity**: `qty[rake] ≤ rake_capacity` (typically 3800 MT for BOXN)
+  3. **Route Capacity**: `Σ rakes_on_route[route,day] ≤ max_rakes_per_day[route]`
+  4. **Delivery Deadlines**: `arrival_time[rake] ≤ deadline[plant,material]`
+  5. **Inventory Balance**: `inv[t] = inv[t-1] + received[t] - consumed[t] ≥ safety_stock`
+  6. **Binary Berth Assignment**: One vessel per berth at time t
+- Returns: optimal allocation, cost breakdown, schedule, feasibility status
+
+#### [MODIFY] [optimizer.js](C:\Users\pramo\OneDrive\Desktop\tbp\tbp-logistics\js\engines\optimizer.js)
+- Add `optimizeWithUserData()` function that accepts FOIs, rakes, SAP, and ML predictions
+- Keep existing `optimizeLogistics()` as synthetic-data fallback
+
+---
+
+### Integration & Navigation
+
+#### [MODIFY] [index.html](C:\Users\pramo\OneDrive\Desktop\tbp\tbp-logistics\js\index.html)
+- Add two new nav items in sidebar under "Intelligence" section:
+  - `🧠 ML Studio` → `data-panel="mlstudio"`
+  - `⚙️ Optimizer` → `data-panel="optimizer"`
+- Add two new panel sections in main content area
+
+#### [MODIFY] [app.js](C:\Users\pramo\OneDrive\Desktop\tbp\tbp-logistics\js\app.js)
+- Import and wire up both new modules
+- Add shared state for ML predictions and optimization results
+- Add `renderMLStudioPanel()` and `renderOptimizerPanel()` functions
+- Navigation switch cases for new panels
+
+#### [NEW] [ml-studio.css]()
+- Styling for ML Studio wizard steps, weather input forms, training visualization, prediction results
+
+#### [NEW] [optimization-studio.css]()  
+- Styling for Optimization wizard, constraint editors, results dashboard, Gantt chart
+
+---
+
+## Architecture Diagram
+
+```mermaid
+graph TD
+    A["📂 User Upload<br/>Historical Data CSV"] --> B["🧠 ML Prediction Studio"]
+    W["🌤️ Weather API<br/>Open-Meteo"] --> B
+    MW["📋 Manual Weather Form"] --> B
+    B --> C["Random Forest Model<br/>Train + Predict"]
+    C --> D["Predicted ETAs<br/>Delay Forecasts"]
+    
+    E["📄 FOIs Upload<br/>Demand Requirements"] --> F["⚙️ Optimization Engine"]
+    R["🚂 Rake Allotment Upload"] --> F
+    S["📊 SAP Data Upload<br/>Inventory Levels"] --> F
+    D -->|"Auto-feed"| F
+    
+    F --> G["MILP Solver<br/>jsLPSolver"]
+    G --> H["Optimal Plan"]
+    
+    H --> I["📊 Dashboard"]
+    H --> J["💰 Cost Analytics"]
+    H --> K["📋 Export Excel"]
+    
+    style B fill:#3b82f6,color:#fff
+    style F fill:#8b5cf6,color:#fff
+    style G fill:#10b981,color:#fff
+```
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> 1. **Weather API**: Open-Meteo (free, no key) is my default choice. Do you want OpenWeatherMap (requires API key) instead?
+> 2. **FOIs Format**: What columns does your FOIs file typically have? I'll design for: `Plant, Material, Quantity (MT), Deadline Date, Priority`. Adjust?
+> 3. **Rake Allotment Format**: Expected columns: `Rake ID, Route (Port→Plant), Capacity, Available Date, Status`. Correct?
+> 4. **SAP Data Format**: Expected columns: `Plant, Material, Current Stock, Daily Consumption, Safety Stock Days`. Correct?
+> 5. **Should the two new panels replace the existing "Data Input" and "ML Predictions" panels**, or exist side-by-side?
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Load the app in browser, navigate to ML Studio panel — verify file upload works
+- Train model on synthetic data, verify accuracy metrics display
+- Test weather API fetch for port coordinates
+- Navigate to Optimizer panel, upload sample data
+- Run optimization, verify cost breakdown and feasible solution
+- Check that results flow back to Dashboard and Cost Analytics panels
+
+### Manual Verification
+- Upload a real CSV file and verify parsing
+- Compare optimization output vs. manual calculation for a small dataset
+- Verify all constraint violations are flagged properly

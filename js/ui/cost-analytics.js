@@ -94,7 +94,7 @@ export function renderCostAnalytics(container, optimizationResult) {
                 </div>
                 <div>
                     <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Prediction Model</div>
-                    <div style="font-size:0.82rem;font-weight:500">Random Forest (7 trees)</div>
+                    <div style="font-size:0.82rem;font-weight:500">XGBoost Ensemble (20 trees)</div>
                 </div>
                 <div>
                     <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Training Data</div>
