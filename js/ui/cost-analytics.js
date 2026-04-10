@@ -9,7 +9,13 @@ import { formatINR, formatPercent, formatTons, toCSV, downloadCSV, downloadExcel
  */
 export function renderCostAnalytics(container, optimizationResult) {
     if (!optimizationResult) {
-        container.innerHTML = '<div class="chart-empty"><span class="chart-empty-icon">📊</span>Run optimization to see cost analytics</div>';
+        container.innerHTML = `
+            <div class="chart-empty">
+                <div class="chart-empty-icon">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                </div>
+                <div>Operational data pending optimization. Run engine to see cost analytics.</div>
+            </div>`;
         return;
     }
 
@@ -23,26 +29,26 @@ export function renderCostAnalytics(container, optimizationResult) {
                 <p class="card-subtitle">AI-optimized vs. baseline comparison</p>
             </div>
             <div class="download-bar">
-                <button class="btn btn-ghost btn-sm" id="downloadCostCSV">📥 CSV</button>
-                <button class="btn btn-ghost btn-sm" id="downloadCostExcel">📊 Excel</button>
+                <button class="btn btn-ghost btn-sm" id="downloadCostCSV">CSV</button>
+                <button class="btn btn-ghost btn-sm" id="downloadCostExcel">Excel</button>
             </div>
         </div>
 
         <!-- Savings Summary Cards -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px">
-            <div class="card" style="background:rgba(var(--accent-success-rgb),0.06);border-color:rgba(var(--accent-success-rgb),0.15);padding:16px;text-align:center">
-                <div style="font-size:0.72rem;color:var(--accent-success);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Total Savings</div>
-                <div style="font-size:1.6rem;font-weight:700;color:var(--accent-success);font-family:'JetBrains Mono',monospace;margin:4px 0">${formatINR(savings.totalSaved, true)}</div>
+            <div class="card" style="background:#f0fdf4;border-color:rgba(21,128,61,0.2);padding:16px;text-align:center">
+                <div style="font-size:0.72rem;color:#15803d;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Total Savings</div>
+                <div style="font-size:1.6rem;font-weight:700;color:#15803d;font-family:'JetBrains Mono',monospace;margin:4px 0">${formatINR(savings.totalSaved, true)}</div>
                 <div style="font-size:0.72rem;color:var(--text-muted)">↗ ${savings.percentSaved}% reduction</div>
             </div>
-            <div class="card" style="background:rgba(var(--accent-primary-rgb),0.06);border-color:rgba(var(--accent-primary-rgb),0.15);padding:16px;text-align:center">
-                <div style="font-size:0.72rem;color:var(--accent-primary);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Demurrage Saved</div>
-                <div style="font-size:1.6rem;font-weight:700;color:var(--accent-primary);font-family:'JetBrains Mono',monospace;margin:4px 0">${formatINR(savings.demurrageSaved, true)}</div>
+            <div class="card" style="background:#eff6ff;border-color:rgba(29,78,216,0.2);padding:16px;text-align:center">
+                <div style="font-size:0.72rem;color:#1d4ed8;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Demurrage Saved</div>
+                <div style="font-size:1.6rem;font-weight:700;color:#1d4ed8;font-family:'JetBrains Mono',monospace;margin:4px 0">${formatINR(savings.demurrageSaved, true)}</div>
                 <div style="font-size:0.72rem;color:var(--text-muted)">↗ ${savings.demurragePercentSaved}% reduction</div>
             </div>
-            <div class="card" style="background:rgba(var(--accent-purple-rgb),0.06);border-color:rgba(var(--accent-purple-rgb),0.15);padding:16px;text-align:center">
-                <div style="font-size:0.72rem;color:var(--accent-purple);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Supply Reliability</div>
-                <div style="font-size:1.6rem;font-weight:700;color:var(--accent-purple);font-family:'JetBrains Mono',monospace;margin:4px 0">${savings.supplyReliability}%</div>
+            <div class="card" style="background:#faf5ff;border-color:rgba(126,34,206,0.2);padding:16px;text-align:center">
+                <div style="font-size:0.72rem;color:#7e22ce;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Supply Reliability</div>
+                <div style="font-size:1.6rem;font-weight:700;color:#7e22ce;font-family:'JetBrains Mono',monospace;margin:4px 0">${savings.supplyReliability}%</div>
                 <div style="font-size:0.72rem;color:var(--text-muted)">↗ vs 72% baseline</div>
             </div>
         </div>
@@ -74,7 +80,7 @@ export function renderCostAnalytics(container, optimizationResult) {
 
         <!-- Optimization Method Info -->
         <div class="card" style="background:var(--bg-tertiary)">
-            <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">🧠 Optimization Method</h4>
+            <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">Optimization Parameters</h4>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div>
                     <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Algorithm</div>

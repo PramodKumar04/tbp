@@ -31,7 +31,9 @@ export function renderMLStudioPanel(vessels = []) {
                     <p style="color:var(--text-muted);margin-bottom:20px">Provide a CSV/Excel file with historical logistics delays to train the XGBoost model.</p>
 
                     <div class="file-drop-zone" id="mlFileDropZone" style="cursor:pointer">
-                        <div class="drop-icon">📄</div>
+                        <div class="drop-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        </div>
                         <p id="mlUploadStatusText">Drag and drop CSV/Excel here or click to browse</p>
                         <input type="file" id="mlFileInput" accept=".csv, .xlsx, .xls" style="display:none">
                         <button class="btn btn-primary" onclick="document.getElementById('mlFileInput').click()">Browse Files</button>
@@ -49,7 +51,8 @@ export function renderMLStudioPanel(vessels = []) {
                     <p style="color:var(--text-muted);margin-bottom:20px">Live weather scores are factored into delay predictions.</p>
                     <div id="weatherPortScores" class="metrics-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px"></div>
                     <div id="weatherLoadingMsg" style="text-align:center;color:var(--text-muted);padding:30px">
-                        🔄 Fetching weather for Indian ports...
+                        <span class="loading-spinner" style="display:inline-block;margin-bottom:12px"></span>
+                        <div>Syncing live weather data for Indian logistics hubs...</div>
                     </div>
                     <button class="btn btn-primary" id="btnNextToTrain" style="margin-top:20px;display:none">Next: Train Model →</button>
                 </div>
@@ -59,30 +62,30 @@ export function renderMLStudioPanel(vessels = []) {
                     <h2>Train XGBoost Ensemble Model</h2>
                     <div id="trainingProgress" style="display:none;margin-top:20px">
                         <p>Training 20-tree gradient boosted ensemble...</p>
-                        <div class="progress-bar" style="width:100%;background:#333;height:10px;border-radius:5px;margin-top:12px">
-                            <div class="progress-fill" id="trainBarFill" style="width:0%;background:#3b82f6;height:100%;border-radius:5px;transition:width 0.08s"></div>
+                        <div class="progress-bar" style="width:100%;background:var(--bg-tertiary);height:10px;border-radius:5px;margin-top:12px">
+                            <div class="progress-fill" id="trainBarFill" style="width:0%;background:var(--primary);height:100%;border-radius:5px;transition:width 0.08s"></div>
                         </div>
                         <p id="trainStatusMsg" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">Initializing...</p>
                     </div>
                     <div id="trainingResults" style="display:none;margin-top:20px">
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px">
-                            <div class="card" style="text-align:center;padding:20px;border-left:4px solid #3b82f6">
+                            <div class="card" style="text-align:center;padding:20px;border-top:4px solid var(--primary)">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">MAE (Hours)</div>
-                                <div id="metricMae" style="font-size:2rem;font-weight:700;color:#3b82f6">--</div>
+                                <div id="metricMae" style="font-size:2rem;font-weight:700;color:var(--primary)">--</div>
                             </div>
-                            <div class="card" style="text-align:center;padding:20px;border-left:4px solid #8b5cf6">
+                            <div class="card" style="text-align:center;padding:20px;border-top:4px solid #8b5cf6">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">RMSE (Hours)</div>
                                 <div id="metricRmse" style="font-size:2rem;font-weight:700;color:#8b5cf6">--</div>
                             </div>
-                            <div class="card" style="text-align:center;padding:20px;border-left:4px solid #10b981">
+                            <div class="card" style="text-align:center;padding:20px;border-top:4px solid var(--accent-success)">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">R² Score</div>
-                                <div id="metricR2" style="font-size:2rem;font-weight:700;color:#10b981">--</div>
+                                <div id="metricR2" style="font-size:2rem;font-weight:700;color:var(--accent-success)">--</div>
                             </div>
                         </div>
-                        <div id="trainSummaryMsg" style="margin-top:16px;padding:12px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:8px;font-size:0.82rem;color:var(--text-secondary)"></div>
+                        <div id="trainSummaryMsg" style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.82rem;color:var(--text-secondary)"></div>
                         <button class="btn btn-primary" id="btnNextToPredict" style="margin-top:20px;width:100%">Next: View Predictions →</button>
                     </div>
-                    <button class="btn btn-primary" id="btnTrain" style="width:100%;margin-top:20px">⚡ Start Training</button>
+                    <button class="btn btn-primary" id="btnTrain" style="width:100%;margin-top:20px">Initialize Training Sequence</button>
                 </div>
 
                 <!-- Step 4: Predictions -->
@@ -186,9 +189,12 @@ async function fetchWeather() {
         try {
             const data = await weatherApi.getWeather(port.id);
             portWeatherCache[port.id] = data.score;
-            const scoreColor = data.score > 0.7 ? '#10b981' : data.score > 0.5 ? '#f59e0b' : '#ef4444';
+            const scoreColor = data.score > 0.7 ? '#15803d' : data.score > 0.5 ? '#b45309' : '#b91c1c';
+            const scoreBg = data.score > 0.7 ? '#f0fdf4' : data.score > 0.5 ? '#fffbeb' : '#fef2f2';
+            const scoreBorder = data.score > 0.7 ? '#bbf7d0' : data.score > 0.5 ? '#fde68a' : '#fecaca';
+
             container.innerHTML += `
-                <div class="card" style="padding:16px;border-left:4px solid ${scoreColor}">
+                <div class="card" style="padding:16px;border-top:4px solid ${scoreColor};background:${scoreBg};border-color:${scoreBorder}">
                     <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">${port.name} Port</div>
                     <div style="font-size:1.6rem;font-weight:700;color:${scoreColor}">${data.score.toFixed(2)}</div>
                     <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:4px">
@@ -199,9 +205,9 @@ async function fetchWeather() {
         } catch(e) {
             portWeatherCache[port.id] = 0.7; // fallback
             container.innerHTML += `
-                <div class="card" style="padding:16px;border-left:4px solid #f59e0b">
+                <div class="card" style="padding:16px;border-top:4px solid #b45309;background:#fffbeb;border-color:#fde68a">
                     <div style="font-size:0.72rem;color:var(--text-muted)">${port.name}</div>
-                    <div style="font-size:1.2rem;font-weight:700;color:#f59e0b">N/A</div>
+                    <div style="font-size:1.2rem;font-weight:700;color:#b45309">N/A</div>
                     <div style="font-size:0.72rem;color:var(--text-muted)">Weather API unavailable</div>
                 </div>
             `;
@@ -300,7 +306,8 @@ function renderPredictionsOutput() {
     // Auto-train with synthetic data if model hasn't been trained yet
     if (!predictor.trained) {
         container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted)">
-            ⚙️ Training model on synthetic data...
+            <span class="loading-spinner"></span>
+            <div style="margin-top:10px">Training XGBoost model on baseline synthetic data...</div>
         </div>`;
         const synthData = generateSyntheticTrainingData();
         predictor.trainOnUserData(synthData, 20);
@@ -320,7 +327,7 @@ function renderPredictionsOutput() {
                 ...vessel,
                 portCongestion: portWeatherCache[vessel.destinationPort] ? 1 - portWeatherCache[vessel.destinationPort] : undefined
             });
-            const delayColor = pred.predictedDelay > 24 ? '#ef4444' : pred.predictedDelay > 8 ? '#f59e0b' : '#10b981';
+            const delayColor = pred.predictedDelay > 24 ? '#b91c1c' : pred.predictedDelay > 8 ? '#b45309' : '#15803d';
             const riskLabel = pred.predictedDelay > 24 ? '🔴 High Risk' : pred.predictedDelay > 8 ? '🟡 Moderate' : '🟢 On Track';
 
             return `

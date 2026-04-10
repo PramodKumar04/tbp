@@ -66,15 +66,15 @@ export function renderOptimizerPanel(autoRun = false) {
                     <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
                         <label style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);padding:14px 16px;border-radius:8px;border:1px solid var(--border-primary)">
                             <span style="font-size:0.85rem">Max Rake Capacity (MT)</span>
-                            <input type="number" id="constRakeCap" value="3800" style="width:100px;background:var(--bg-tertiary);color:#fff;border:1px solid var(--border-primary);padding:6px 8px;border-radius:6px;text-align:right">
+                            <input type="number" id="constRakeCap" value="3800" style="width:100px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border-primary);padding:6px 8px;border-radius:6px;text-align:right">
                         </label>
                         <label style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);padding:14px 16px;border-radius:8px;border:1px solid var(--border-primary)">
                             <span style="font-size:0.85rem">Demurrage Rate (USD/day)</span>
-                            <input type="number" id="constDemurrage" value="25000" style="width:100px;background:var(--bg-tertiary);color:#fff;border:1px solid var(--border-primary);padding:6px 8px;border-radius:6px;text-align:right">
+                            <input type="number" id="constDemurrage" value="25000" style="width:100px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border-primary);padding:6px 8px;border-radius:6px;text-align:right">
                         </label>
                         <label style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);padding:14px 16px;border-radius:8px;border:1px solid var(--border-primary)">
                             <span style="font-size:0.85rem">Enable ML Delay Constraints</span>
-                            <input type="checkbox" id="constEnableML" checked style="width:20px;height:20px">
+                            <input type="checkbox" id="constEnableML" checked style="width:20px;height:20px;accent-color:var(--primary)">
                         </label>
                     </div>
                     <button class="btn btn-primary" id="btnGoToSolve" style="margin-top:20px;width:100%">Next: Run Optimization →</button>
@@ -91,25 +91,24 @@ export function renderOptimizerPanel(autoRun = false) {
                     
                     <div id="solveProgress" style="display:none;margin-bottom:20px">
                         <p id="solveStatusMsg" style="color:var(--text-muted);margin-bottom:8px">Preparing model...</p>
-                        <div class="progress-bar" style="width:100%;background:#333;height:10px;border-radius:5px">
-                            <div class="progress-fill" id="solveBarFill" style="width:0%;background:#10b981;height:100%;border-radius:5px;transition:width 0.1s"></div>
+                        <div class="progress-bar" style="width:100%;background:var(--bg-tertiary);height:10px;border-radius:5px">
+                            <div class="progress-fill" id="solveBarFill" style="width:0%;background:var(--accent-success);height:100%;border-radius:5px;transition:width 0.1s"></div>
                         </div>
                     </div>
 
                     <div id="solveResults" style="display:none">
-                        <!-- Summary Grid -->
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
-                            <div class="card" style="text-align:center;padding:16px;border-left:4px solid #10b981">
+                            <div class="card" style="text-align:center;padding:16px;border-top:4px solid var(--accent-success)">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">Optimized Cost</div>
-                                <div id="solveTotalCost" style="font-size:1.5rem;font-weight:700;color:#10b981">—</div>
+                                <div id="solveTotalCost" style="font-size:1.5rem;font-weight:700;color:var(--accent-success)">—</div>
                             </div>
-                            <div class="card" style="text-align:center;padding:16px;border-left:4px solid #3b82f6">
+                            <div class="card" style="text-align:center;padding:16px;border-top:4px solid var(--primary)">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">Cost Saved vs Baseline</div>
-                                <div id="solveSavings" style="font-size:1.5rem;font-weight:700;color:#3b82f6">—</div>
+                                <div id="solveSavings" style="font-size:1.5rem;font-weight:700;color:var(--primary)">—</div>
                             </div>
-                            <div class="card" style="text-align:center;padding:16px;border-left:4px solid #8b5cf6">
+                            <div class="card" style="text-align:center;padding:16px;border-top:4px solid #8b5cf6">
                                 <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px">Feasibility</div>
-                                <div id="solveFeasible" style="font-size:1.2rem;font-weight:700;color:#10b981">OPTIMAL</div>
+                                <div id="solveFeasible" style="font-size:1.2rem;font-weight:700;color:var(--accent-success)">OPTIMAL</div>
                             </div>
                         </div>
 
@@ -263,9 +262,9 @@ async function fetchAndShowPreview(type, containerId) {
         container.style.display = 'block';
         const headers = Object.keys(data[0]);
         container.innerHTML = `
-            <table style="width:100%;border-collapse:collapse;font-size:11px;color:#ddd">
-                <tr style="background:var(--bg-card)">${headers.map(h => `<th style="padding:6px;border:1px solid var(--border-primary)">${h}</th>`).join('')}</tr>
-                ${data.slice(0, 5).map(row => `<tr>${headers.map(h => `<td style="padding:6px;border:1px solid var(--border-primary)">${row[h] ?? ''}</td>`).join('')}</tr>`).join('')}
+            <table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text-secondary)">
+                <tr style="background:var(--bg-secondary)">${headers.map(h => `<th style="padding:10px;border:1px solid var(--border-primary)">${h}</th>`).join('')}</tr>
+                ${data.slice(0, 5).map(row => `<tr>${headers.map(h => `<td style="padding:10px;border:1px solid var(--border-primary)">${row[h] ?? ''}</td>`).join('')}</tr>`).join('')}
             </table>
             <p style="font-size:10px;color:var(--text-muted);margin-top:6px">Showing 5 of ${data.length} records</p>
         `;
@@ -422,7 +421,7 @@ function displayResults(result) {
                                 ${v.demurrage > 0 ? formatINR(v.demurrage, true) : '—'}
                             </td>
                             <td style="padding:10px;text-align:center">
-                                <span style="background:${v.assigned ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'};color:${v.assigned ? '#10b981' : '#ef4444'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
+                                <span style="background:${v.assigned ? '#f0fdf4' : '#fef2f2'};color:${v.assigned ? '#15803d' : '#991b1b'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
                                     ${v.assigned ? 'BERTH ASSIGNED' : 'QUEUED'}
                                 </span>
                             </td>
@@ -453,7 +452,7 @@ function displayResults(result) {
                             <td style="padding:10px;text-align:right">${(r.quantity || 0).toLocaleString()} MT</td>
                             <td style="padding:10px;text-align:right">${formatINR(r.cost || 0, true)}</td>
                             <td style="padding:10px;text-align:center">
-                                <span style="background:${r.used ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)'};color:${r.used ? '#10b981' : '#64748b'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
+                                <span style="background:${r.used ? '#f0fdf4' : '#f1f5f9'};color:${r.used ? '#15803d' : '#475569'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
                                     ${r.used ? 'ACTIVE' : 'STANDBY'}
                                 </span>
                             </td>

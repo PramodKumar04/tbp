@@ -49,7 +49,7 @@ export async function toggleProfile(show) {
  * Update the HTML content of the profile panel with user data
  */
 async function updateProfileContent() {
-    const user = auth.getUser() || { username: 'Guest', email: 'guest@bharatsupply.com' };
+    const user = auth.getUser() || { username: '', email: '' };
     
     // Fetch bookings and budget
     let bookings = [];
@@ -73,7 +73,7 @@ async function updateProfileContent() {
         console.warn('[Profile] Failed to fetch data', e);
     }
 
-    const initials = user.username.substring(0, 1).toUpperCase();
+    const initials = (user.username || '?').substring(0, 1).toUpperCase();
     const berthedCount = bookings.filter(b => b.status === 'berthed').length;
     const transitCount = bookings.filter(b => b.status === 'in-transit').length;
 

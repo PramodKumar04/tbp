@@ -17,48 +17,48 @@ const NODE_TYPES = {
     supplier_port: {
         label: 'Supplier Port',
         shortLabel: 'Port',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2"><path d="M3 17h4V7L12 2l5 5v10h4"/><circle cx="12" cy="14" r="3"/><path d="M12 17v4"/></svg>`,
-        color: '#e74c3c',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#991b1b" stroke-width="2"><path d="M3 17h4V7L12 2l5 5v10h4"/><circle cx="12" cy="14" r="3"/><path d="M12 17v4"/></svg>`,
+        color: '#991b1b',
         bgColor: '#fef2f2',
         borderColor: '#fecaca',
     },
     plant: {
         label: 'Plant',
         shortLabel: 'Plant',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M3 21h18M3 7v14m4-14v14m4-8v8m4-12v12m4-16v16"/></svg>`,
-        color: '#3b82f6',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2"><path d="M3 21h18M3 7v14m4-14v14m4-8v8m4-12v12m4-16v16"/></svg>`,
+        color: '#1e40af',
         bgColor: '#eff6ff',
         borderColor: '#bfdbfe',
     },
     supplier: {
         label: 'Supplier',
         shortLabel: 'Supplier',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>`,
-        color: '#f97316',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>`,
+        color: '#9a3412',
         bgColor: '#fff7ed',
         borderColor: '#fed7aa',
     },
     production: {
         label: 'Production',
         shortLabel: 'Prod',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/><path d="M12 11v4"/></svg>`,
-        color: '#8b5cf6',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/><path d="M12 11v4"/></svg>`,
+        color: '#5b21b6',
         bgColor: '#f5f3ff',
         borderColor: '#ddd6fe',
     },
     warehouse: {
         label: 'Warehouse',
         shortLabel: 'WH',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/></svg>`,
-        color: '#10b981',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#065f46" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/></svg>`,
+        color: '#065f46',
         bgColor: '#ecfdf5',
         borderColor: '#a7f3d0',
     },
     customer: {
         label: 'Customer',
         shortLabel: 'Cust',
-        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`,
-        color: '#06b6d4',
+        iconSVG: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#155e75" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`,
+        color: '#155e75',
         bgColor: '#ecfeff',
         borderColor: '#a5f3fc',
     },
@@ -299,7 +299,7 @@ export class NetworkWhiteboard {
                     <div class="nw-palette-icon" style="background:${cfg.bgColor};border-color:${cfg.borderColor}">${cfg.iconSVG}</div>
                     <span style="font-size:0.72rem;font-weight:600;color:${cfg.color}">${cfg.label}</span>
                 `;
-                ghost.style.cssText = `position:fixed;left:${e.clientX - 30}px;top:${e.clientY - 30}px;z-index:1000;pointer-events:none;opacity:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;background:#fff;border-radius:10px;border:2px solid ${cfg.borderColor};box-shadow:0 8px 24px rgba(0,0,0,0.15);transition:opacity 0.15s;`;
+                ghost.style.cssText = `position:fixed;left:${e.clientX - 30}px;top:${e.clientY - 30}px;z-index:1000;pointer-events:none;opacity:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;background:var(--bg-card);border-radius:10px;border:2px solid ${cfg.borderColor};box-shadow:var(--shadow-lg);transition:opacity 0.15s;`;
                 document.body.appendChild(ghost);
                 this._paletteDragGhost = ghost;
 
@@ -704,7 +704,7 @@ export class NetworkWhiteboard {
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', `M ${from.x} ${from.y} Q ${cx} ${cy}, ${to.x} ${to.y}`);
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#93c5fd');
+            path.setAttribute('stroke', '#cbd5e1');
             path.setAttribute('stroke-width', '2');
             svg.appendChild(path);
 
@@ -716,7 +716,7 @@ export class NetworkWhiteboard {
             const a2y = to.y - 12 * Math.sin(angle) - 6 * Math.sin(angle + Math.PI / 5);
             const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             arrow.setAttribute('points', `${to.x},${to.y} ${a1x},${a1y} ${a2x},${a2y}`);
-            arrow.setAttribute('fill', '#93c5fd');
+            arrow.setAttribute('fill', '#94a3b8');
             svg.appendChild(arrow);
 
             // Label pill
@@ -728,15 +728,15 @@ export class NetworkWhiteboard {
             bg.setAttribute('width', tw);
             bg.setAttribute('height', 20);
             bg.setAttribute('rx', '10');
-            bg.setAttribute('fill', '#eff6ff');
-            bg.setAttribute('stroke', '#bfdbfe');
+            bg.setAttribute('fill', '#f1f5f9');
+            bg.setAttribute('stroke', '#e2e8f0');
             svg.appendChild(bg);
 
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', lx);
             text.setAttribute('y', ly + 4);
             text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('fill', '#3b82f6');
+            text.setAttribute('fill', '#64748b');
             text.setAttribute('font-size', '11');
             text.setAttribute('font-weight', '500');
             text.setAttribute('font-family', 'Inter, sans-serif');

@@ -45,10 +45,12 @@ export async function initApp() {
     if (!root) return;
     
     if (!auth.isAuthenticated()) {
+        document.body.className = 'landing-page';
         renderLandingView(root);
         return;
     }
 
+    document.body.className = '';
     renderDashboardView(root);
     console.log('[BharatSupply] Initializing Control Tower...');
 
@@ -145,21 +147,28 @@ async function loadAppData() {
         const vessels = await vesselRes.json();
 
         if (!rakes.data?.length || !vessels.data?.length) {
-            console.warn('[App] Backend data empty, using synthetic fallback');
-            appData = generateAllData();
+            console.warn('[App] Backend data empty, initializing clean state');
+            appData = { vessels: [], rakes: [], inventory: {}, isEmpty: true };
+            // dashboardSummary will naturally stay at zero from its initial value
         } else {
             appData = {
                 rakes: rakes.data[0].data,
                 vessels: vessels.data[0].data,
                 inventory: mapInventory(inv.data[0]?.data || []),
-                isLive: true
+                isLive: true,
+                isEmpty: false
             };
             normalizeAppData();
         }
-        appData.inventoryProjection = generateInventoryProjection(appData.inventory, appData.rakes);
+        
+        if (appData.isEmpty) {
+            appData.inventoryProjection = {};
+        } else {
+            appData.inventoryProjection = generateInventoryProjection(appData.inventory, appData.rakes);
+        }
     } catch (err) {
         console.error('[App] Load failed', err);
-        appData = generateAllData();
+        appData = { vessels: [], rakes: [], inventory: {}, isEmpty: true };
     }
 }
 
@@ -240,7 +249,12 @@ async function runInitialOptimization() {
         console.warn('[App] Failed to check for existing optimization');
     }
 
-    // 2. Only if no existing optimization, run a fresh one and save it
+    // 2. Only if no existing optimization AND data exists, run a fresh one and save it
+    if (appData.isEmpty) {
+        console.log('[App] New account detected (no data), skipping baseline optimization.');
+        return;
+    }
+
     console.log('[App] No baseline optimization found, running initial...');
     const result = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
     
@@ -462,11 +476,11 @@ function renderOverviewPanel() {
     renderKPIs(kpis, dashboardSummary);
     
     setTimeout(() => {
-        // 1. Cost Doughnut — needs costBreakdown object (not entire summaryData)
-        const cb = dashboardSummary.costBreakdown || {};
+        // 1. Cost Doughnut
+        const cb = dashboardSummary.costBreakdown || { freight: 0, portHandling: 0, railTransport: 0, demurrage: 0, storage: 0 };
         renderCostDoughnut('costDoughnutChart', cb);
 
-        // 2. Vessel Timeline — prefer optimized schedule, fallback to raw vessels
+        // 2. Vessel Timeline
         const timelineVessels = (dashboardSummary.activeRoutes && dashboardSummary.activeRoutes.length > 0)
             ? dashboardSummary.activeRoutes.map(v => ({
                 name: v.vessel || v.name || 'Unknown',
@@ -478,11 +492,11 @@ function renderOverviewPanel() {
             : (appData.vessels || []);
         renderVesselTimeline('vesselTimelineChart', timelineVessels);
 
-        // 3. Inventory — always from live projection
+        // 3. Inventory
         renderInventoryChart('inventoryAreaChart', appData.inventoryProjection || {});
 
-        // 4. Reliability gauge — Dynamic real-time calculation
-        const reliability = calculateSupplyReliability(appData.vessels, appData.inventory, activePredictions);
+        // 4. Reliability gauge
+        const reliability = appData.isEmpty ? 0 : calculateSupplyReliability(appData.vessels, appData.inventory, activePredictions);
         const gaugeContainer = document.getElementById('reliabilityGauge');
         if (gaugeContainer) {
             renderReliabilityGauge(gaugeContainer, reliability);

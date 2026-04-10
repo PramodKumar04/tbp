@@ -1,13 +1,13 @@
 :root {
     --primary: #f06522;
-    --primary-glow: rgba(240, 101, 34, 0.4);
-    --bg-dark: #0a0b10;
-    --card-bg: rgba(20, 22, 30, 0.8);
-    --text-main: #e0e6ed;
-    --text-dim: #94a3b8;
-    --accent-blue: #38bdf8;
-    --glass: rgba(255, 255, 255, 0.05);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    --primary-glow: rgba(240, 101, 34, 0.2);
+    --bg-dark: #ffffff;
+    --card-bg: #ffffff;
+    --text-main: #0f172a;
+    --text-dim: #64748b;
+    --accent-blue: #0284c7;
+    --glass: rgba(0, 0, 0, 0.02);
+    --glass-border: #e2e8f0;
 }
 
 * {
@@ -17,7 +17,7 @@
     font-family: 'Inter', -apple-system, sans-serif;
 }
 
-body {
+body.landing-page {
     background-color: var(--bg-dark);
     color: var(--text-main);
     overflow-x: hidden;
@@ -68,7 +68,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(to right, rgba(10, 11, 16, 0.9) 30%, rgba(10, 11, 16, 0.4) 100%);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%);
     z-index: 2;
 }
 
@@ -79,12 +79,12 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: radial-gradient(circle at 50% 50%, rgba(240, 101, 34, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle at 50% 50%, rgba(240, 101, 34, 0.05) 0%, transparent 70%);
     pointer-events: none;
     z-index: 3;
 }
 
-.container {
+.hero .container {
     max-width: 1200px;
     width: 100%;
     margin: 0 auto;
@@ -93,6 +93,7 @@ body {
     grid-template-columns: 1.2fr 1fr;
     gap: 4rem;
     align-items: center;
+    position: relative;
 }
 
 .hero-content h1 {
@@ -100,7 +101,7 @@ body {
     font-weight: 800;
     line-height: 1.1;
     margin-bottom: 1.5rem;
-    background: linear-gradient(to right, #fff, var(--text-dim));
+    background: linear-gradient(to right, #000, #475569);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -115,11 +116,10 @@ body {
 
 .auth-card {
     background: var(--card-bg);
-    backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
     border-radius: 24px;
     padding: 3rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
     transition: transform 0.3s ease;
 }
 
@@ -167,11 +167,11 @@ body {
 
 .form-group input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 0.875rem 1rem;
-    color: #fff;
+    color: #000;
     transition: all 0.3s ease;
 }
 

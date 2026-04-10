@@ -59,13 +59,23 @@ export class MilpSolver {
     }
 
     fallbackSolve(fois, rakes, sapData) {
-        return {
-            feasible: true,
-            totalCost: (Math.random() * 2000000 + 1000000), // Random base for presentation
-            costBreakdown: { transport: 1000000, handling: 200000, penalty: 0 },
-            plan: []
-        };
-    }
+    let totalCost = 0;
+
+    fois.forEach(f => {
+        totalCost += f.quantity * 10;
+    });
+
+    return {
+        feasible: true,
+        totalCost,
+        costBreakdown: {
+            transport: totalCost * 0.7,
+            handling: totalCost * 0.2,
+            penalty: totalCost * 0.1,
+        },
+        plan: []
+    };
+}
 }
 
 export const milpSolver = new MilpSolver();

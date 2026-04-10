@@ -13,7 +13,7 @@ const CHART_DEFAULTS = {
             display: true,
             position: 'bottom',
             labels: {
-                color: '#94a3b8',
+                color: '#475569',
                 font: { family: 'Inter', size: 11 },
                 padding: 16,
                 usePointStyle: true,
@@ -21,10 +21,10 @@ const CHART_DEFAULTS = {
             },
         },
         tooltip: {
-            backgroundColor: '#1e293b',
-            titleColor: '#f1f5f9',
-            bodyColor: '#94a3b8',
-            borderColor: 'rgba(255,255,255,0.1)',
+            backgroundColor: '#ffffff',
+            titleColor: '#1e293b',
+            bodyColor: '#475569',
+            borderColor: '#e2e8f0',
             borderWidth: 1,
             cornerRadius: 8,
             padding: 12,
@@ -32,15 +32,17 @@ const CHART_DEFAULTS = {
             bodyFont: { family: 'JetBrains Mono', size: 11 },
             displayColors: true,
             boxPadding: 4,
+            shadowColor: 'rgba(0,0,0,0.1)',
+            shadowBlur: 10,
         },
     },
     scales: {
         x: {
-            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false },
             ticks: { color: '#64748b', font: { family: 'Inter', size: 10 } },
         },
         y: {
-            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false },
             ticks: { color: '#64748b', font: { family: 'Inter', size: 10 } },
         },
     },
@@ -70,7 +72,7 @@ export function renderCostDoughnut(canvasId, costBreakdown) {
         costBreakdown.demurrage,
         costBreakdown.storage,
     ];
-    const colors = ['#3b82f6', '#06b6d4', '#8b5cf6', '#ef4444', '#f59e0b'];
+    const colors = ['#1e40af', '#0e7490', '#5b21b6', '#b91c1c', '#b45309'];
 
     chartInstances[canvasId] = new Chart(ctx, {
         type: 'doughnut',
@@ -79,8 +81,8 @@ export function renderCostDoughnut(canvasId, costBreakdown) {
             datasets: [{
                 data,
                 backgroundColor: colors,
-                borderColor: '#111827',
-                borderWidth: 3,
+                borderColor: '#ffffff',
+                borderWidth: 2,
                 hoverOffset: 8,
             }],
         },
@@ -92,7 +94,7 @@ export function renderCostDoughnut(canvasId, costBreakdown) {
                 legend: {
                     position: 'bottom',
                     labels: {
-                        color: '#94a3b8',
+                        color: '#475569',
                         font: { family: 'Inter', size: 11 },
                         padding: 14,
                         usePointStyle: true,
@@ -127,9 +129,9 @@ export function renderVesselTimeline(canvasId, vessels) {
     const delayData = sorted.map(v => Math.max(0, v.delayHours));
 
     const barColors = sorted.map(v => {
-        if (v.status === 'delayed') return 'rgba(239, 68, 68, 0.7)';
-        if (v.status === 'berthed' || v.status === 'unloading') return 'rgba(16, 185, 129, 0.7)';
-        return 'rgba(59, 130, 246, 0.7)';
+        if (v.status === 'delayed') return 'rgba(185, 28, 28, 0.7)';
+        if (v.status === 'berthed' || v.status === 'unloading') return 'rgba(21, 128, 61, 0.7)';
+        return 'rgba(30, 64, 175, 0.7)';
     });
 
     chartInstances[canvasId] = new Chart(ctx, {
@@ -140,14 +142,14 @@ export function renderVesselTimeline(canvasId, vessels) {
                 {
                     label: 'Scheduled (hrs from now)',
                     data: scheduledData,
-                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    backgroundColor: 'rgba(30, 64, 175, 0.6)',
                     borderRadius: 4,
                     borderSkipped: false,
                 },
                 {
                     label: 'Delay (hrs)',
                     data: delayData,
-                    backgroundColor: sorted.map(v => v.delayHours > 24 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(245, 158, 11, 0.6)'),
+                    backgroundColor: sorted.map(v => v.delayHours > 24 ? 'rgba(185, 28, 28, 0.6)' : 'rgba(180, 83, 9, 0.6)'),
                     borderRadius: 4,
                     borderSkipped: false,
                 },
@@ -190,10 +192,10 @@ export function renderInventoryChart(canvasId, projection, plantId = 'bhilai') {
     if (!plantData) return;
 
     const materialColors = {
-        coal: { bg: 'rgba(55, 65, 81, 0.4)', border: '#6b7280' },
-        iron_ore: { bg: 'rgba(220, 38, 38, 0.3)', border: '#ef4444' },
-        limestone: { bg: 'rgba(212, 212, 216, 0.3)', border: '#a1a1aa' },
-        dolomite: { bg: 'rgba(167, 139, 250, 0.3)', border: '#8b5cf6' },
+        coal: { bg: 'rgba(71, 85, 105, 0.4)', border: '#475569' },
+        iron_ore: { bg: 'rgba(153, 27, 27, 0.3)', border: '#991b1b' },
+        limestone: { bg: 'rgba(115, 115, 115, 0.3)', border: '#737373' },
+        dolomite: { bg: 'rgba(91, 33, 182, 0.3)', border: '#5b21b6' },
     };
 
     const datasets = [];
@@ -225,7 +227,7 @@ export function renderInventoryChart(canvasId, projection, plantId = 'bhilai') {
         datasets.push({
             label: 'Safety Stock',
             data: plantData[firstMat].map(d => d.safetyStock),
-            borderColor: 'rgba(239, 68, 68, 0.5)',
+            borderColor: 'rgba(153, 27, 27, 0.5)',
             borderDash: [6, 4],
             borderWidth: 1.5,
             fill: false,
@@ -280,15 +282,15 @@ export function renderDelayScatter(canvasId, vessels, predictions) {
                     data,
                     backgroundColor: data.map(d => {
                         const error = Math.abs(d.x - d.y);
-                        if (error < 6) return 'rgba(16, 185, 129, 0.7)';
-                        if (error < 18) return 'rgba(245, 158, 11, 0.7)';
-                        return 'rgba(239, 68, 68, 0.7)';
+                        if (error < 6) return 'rgba(21, 128, 61, 0.7)';
+                        if (error < 18) return 'rgba(180, 83, 9, 0.7)';
+                        return 'rgba(185, 28, 28, 0.7)';
                     }),
                     borderColor: data.map(d => {
                         const error = Math.abs(d.x - d.y);
-                        if (error < 6) return '#10b981';
-                        if (error < 18) return '#f59e0b';
-                        return '#ef4444';
+                        if (error < 6) return '#15803d';
+                        if (error < 18) return '#b45309';
+                        return '#b91c1c';
                     }),
                     borderWidth: 1.5,
                     pointRadius: 7,
@@ -298,9 +300,9 @@ export function renderDelayScatter(canvasId, vessels, predictions) {
                     label: 'Perfect Prediction',
                     data: [{ x: -10, y: -10 }, { x: 60, y: 60 }],
                     type: 'line',
-                    borderColor: 'rgba(255,255,255,0.15)',
+                    borderColor: 'rgba(0,0,0,0.1)',
                     borderDash: [6, 4],
-                    borderWidth: 1,
+                    borderWidth: 1.5,
                     pointRadius: 0,
                     fill: false,
                 },
@@ -368,8 +370,8 @@ export function renderCostTrend(canvasId, data) {
                 {
                     label: 'Baseline Cost',
                     data: baselineCosts,
-                    borderColor: 'rgba(239, 68, 68, 0.6)',
-                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    borderColor: 'rgba(185, 28, 28, 0.6)',
+                    backgroundColor: 'rgba(185, 28, 28, 0.05)',
                     fill: true,
                     tension: 0.3,
                     pointRadius: 0,
@@ -379,8 +381,8 @@ export function renderCostTrend(canvasId, data) {
                 {
                     label: 'Optimized Cost',
                     data: optimizedCosts,
-                    borderColor: 'rgba(16, 185, 129, 0.8)',
-                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                    borderColor: 'rgba(21, 128, 61, 0.8)',
+                    backgroundColor: 'rgba(21, 128, 61, 0.05)',
                     fill: true,
                     tension: 0.3,
                     pointRadius: 0,
@@ -415,7 +417,7 @@ export function renderCostTrend(canvasId, data) {
 // ── 6. Supply Reliability Gauge ─────────────────────────
 export function renderReliabilityGauge(container, reliability) {
     const pct = Math.round(reliability * 100);
-    const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#ef4444';
+    const color = pct >= 80 ? '#15803d' : pct >= 60 ? '#b45309' : '#b91c1c';
 
     // SVG arc gauge
     const r = 60;
@@ -430,10 +432,10 @@ export function renderReliabilityGauge(container, reliability) {
                     stroke="${color}"
                     stroke-dasharray="${circumference}"
                     stroke-dashoffset="${offset}" />
-                <text x="75" y="70" text-anchor="middle" fill="${color}"
-                    font-family="JetBrains Mono" font-size="22" font-weight="700">${pct}%</text>
-                <text x="75" y="85" text-anchor="middle" fill="#64748b"
-                    font-family="Inter" font-size="9">RELIABILITY</text>
+                <text x="75" y="70" text-anchor="middle" fill="${pct === 0 ? '#94a3b8' : color}"
+                    font-family="JetBrains Mono" font-size="22" font-weight="700">${pct === 0 ? '—' : pct + '%'}</text>
+                <text x="75" y="86" text-anchor="middle" fill="#000000"
+                    font-family="Inter" font-size="9" font-weight="600">${pct === 0 ? 'PENDING DATA' : 'RELIABILITY INDEX'}</text>
             </svg>
         </div>
     `;

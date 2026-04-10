@@ -72,9 +72,9 @@
 }
 
 .vp-vessel-card--active {
-    border-color: #3b82f6 !important;
-    background: #eff6ff !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    border-color: var(--primary) !important;
+    background: var(--primary-soft) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .vp-vessel-top {
@@ -181,7 +181,7 @@
 
 .vp-plan-subtitle {
     font-size: 0.82rem;
-    color: #3b82f6;
+    color: var(--primary);
     margin-top: 3px;
 }
 
@@ -192,8 +192,8 @@
 
 .vp-plan-qty-num {
     font-size: 1.6rem;
-    font-weight: 800;
-    color: #3b82f6;
+    font-weight: 700;
+    color: var(--primary);
     font-family: 'JetBrains Mono', 'Inter', monospace;
 }
 
@@ -257,8 +257,8 @@
 }
 
 .vp-select:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .vp-select-sm {
@@ -312,9 +312,9 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #3b82f6;
+    background: var(--primary);
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(59,130,246,0.3);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
     border: 2px solid #fff;
 }
 
@@ -427,13 +427,13 @@
 }
 
 .vp-btn-primary {
-    background: #3b82f6;
+    background: var(--primary);
     color: #fff;
 }
 
 .vp-btn-primary:hover {
-    background: #2563eb;
-    box-shadow: 0 4px 14px rgba(59,130,246,0.3);
+    background: #1d4ed8;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
 }
 
 .vp-btn-lg {
@@ -624,8 +624,8 @@
 }
 
 .vp-route-card--selected {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.1) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
 }
 
 .vp-best-badge {

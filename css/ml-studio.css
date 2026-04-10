@@ -23,13 +23,14 @@
 }
 
 .wizard-step:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .wizard-step.active {
-    background: var(--accent-primary);
+    background: var(--primary);
     color: #fff;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .wizard-content {
@@ -37,6 +38,7 @@
     background: var(--bg-card);
     padding: 30px;
     border-radius: 12px;
+    border: 1px solid var(--border-primary);
     box-shadow: var(--shadow-sm);
 }
 
@@ -54,14 +56,14 @@
     border-radius: 12px;
     padding: 40px;
     text-align: center;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--bg-secondary);
     transition: all 0.2s;
     margin: 20px 0;
 }
 
 .file-drop-zone:hover {
-    border-color: var(--accent-primary);
-    background: rgba(59, 130, 246, 0.05);
+    border-color: var(--primary);
+    background: var(--primary-soft);
 }
 
 .file-drop-zone .drop-icon {

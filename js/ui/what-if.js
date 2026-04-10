@@ -24,8 +24,8 @@ export function renderWhatIfPanel(container, data, baselineResults) {
     container.innerHTML = `
         <div class="card-header">
             <div>
-                <h3 class="card-title">🔮 What-If Simulation</h3>
-                <p class="card-subtitle">Test disruption scenarios and analyze impact</p>
+                <h3 class="card-title">Scenario Simulation</h3>
+                <p class="card-subtitle">Test logistics disruption scenarios and analyze cost impacts</p>
             </div>
         </div>
 
@@ -35,7 +35,6 @@ export function renderWhatIfPanel(container, data, baselineResults) {
                 <div class="whatif-scenarios" id="scenarioList">
                     ${SCENARIO_TYPES.map(s => `
                         <div class="scenario-card ${activeScenario === s.id ? 'active' : ''}" data-scenario="${s.id}">
-                            <div class="scenario-icon">${s.icon}</div>
                             <div class="scenario-name">${s.name}</div>
                             <div class="scenario-desc">${s.description}</div>
                         </div>
@@ -144,7 +143,10 @@ function renderScenarioConfig(scenarioId, data) {
                 <div class="form-group">
                     <label class="form-label">${param.label}</label>
                     <select class="form-select" data-param="${param.key}">
-                        ${data.vessels.map(v => `<option value="${v.id}">${v.name} (${v.materialName})</option>`).join('')}
+                        ${data.vessels.map(v => {
+                            const matName = v.materialName || v.material || 'Vessel';
+                            return `<option value="${v.id}">${v.name} (${matName})</option>`;
+                        }).join('')}
                     </select>
                 </div>
             `;
@@ -243,9 +245,9 @@ function renderSimulationResults(container, comparison) {
 
     container.innerHTML = `
         <div class="simulation-result-card animate-slide-up">
-            <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">${changeIcon} Simulation Results</h4>
+            <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">Simulation Impact Analysis</h4>
 
-            <div class="simulation-summary-box" style="background:${isIncrease ? 'rgba(var(--accent-danger-rgb),0.06)' : 'rgba(var(--accent-success-rgb),0.06)'}">
+            <div class="simulation-summary-box" style="background:${isIncrease ? 'rgba(185, 28, 28, 0.06)' : 'rgba(21, 128, 61, 0.06)'}">
                 <p>${summary}</p>
             </div>
 

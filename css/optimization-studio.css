@@ -1,5 +1,5 @@
 .opt-card {
-    background: #1e1e2d;
+    background: var(--bg-card);
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 20px;
@@ -8,23 +8,24 @@
 
 .opt-card h3 {
     margin-top: 0;
-    color: var(--text-secondary);
+    color: var(--text-primary);
 }
 
 .constraint-group {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #1e1e2d;
+    background: var(--bg-secondary);
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 10px;
+    border: 1px solid var(--border-primary);
 }
 
 .constraint-group input {
-    background: #333;
-    color: #fff;
-    border: none;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-primary);
     padding: 8px;
     border-radius: 4px;
     text-align: right;

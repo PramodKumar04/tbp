@@ -17,12 +17,12 @@ let _onPlanConfirmed = null;
 
 // Status color mapping
 const STATUS_COLORS = {
-    'in-transit': { bg: '#ecfdf5', text: '#10b981', label: 'In Transit' },
-    'on-time':    { bg: '#ecfdf5', text: '#10b981', label: 'On Time' },
-    'delayed':    { bg: '#fef3c7', text: '#f59e0b', label: 'Delayed' },
-    'berthed':    { bg: '#dbeafe', text: '#3b82f6', label: 'Berthed' },
-    'unloading':  { bg: '#dbeafe', text: '#3b82f6', label: 'Unloading' },
-    'anchorage':  { bg: '#fef3c7', text: '#f59e0b', label: 'Anchorage' },
+    'in-transit': { bg: '#f1f5f9', text: '#475569', label: 'In Transit' },
+    'on-time':    { bg: '#ecfdf5', text: '#15803d', label: 'On Time' },
+    'delayed':    { bg: '#fffbeb', text: '#b45309', label: 'Delayed' },
+    'berthed':    { bg: '#eff6ff', text: '#1d4ed8', label: 'Berthed' },
+    'unloading':  { bg: '#eff6ff', text: '#1d4ed8', label: 'Unloading' },
+    'anchorage':  { bg: '#fef2f2', text: '#991b1b', label: 'Anchorage' },
 };
 
 /**
@@ -56,7 +56,7 @@ function _renderVesselList() {
             <p class="vp-list-sub">Select a vessel to plan discharge</p>
         </div>
         <div class="vp-list">
-            ${_vessels.map(v => {
+            ${_vessels.length > 0 ? _vessels.map(v => {
                 const sc = STATUS_COLORS[v.status] || STATUS_COLORS['in-transit'];
                 const isActive = _selectedVessel?.id === v.id;
                 const mat = MATERIALS.find(m => m.id === v.material);
@@ -66,7 +66,7 @@ function _renderVesselList() {
                 <div class="vp-vessel-card ${isActive ? 'vp-vessel-card--active' : ''}" data-vid="${v.id}">
                     <div class="vp-vessel-top">
                         <div class="vp-vessel-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/></svg>
                         </div>
                         <h4 class="vp-vessel-name">${v.name}</h4>
                         <span class="vp-status-badge" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>
@@ -86,7 +86,12 @@ function _renderVesselList() {
                         </div>
                     </div>
                 </div>`;
-            }).join('')}
+            }).join('') : `
+                <div style="padding:40px 20px;text-align:center;color:var(--text-muted)">
+                    <div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">NO ACTIVE VESSELS</div>
+                    <div style="font-size:0.68rem">Please upload operational data in the Data Gateway to begin planning.</div>
+                </div>
+            `}
         </div>
     `;
 }
@@ -104,13 +109,13 @@ function _renderEmptyState() {
     return `
         <div class="vp-empty">
             <div class="vp-empty-icon">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.2">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
                     <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
                     <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
                 </svg>
             </div>
-            <p class="vp-empty-text">Select a vessel from the list to start planning.</p>
+            <p class="vp-empty-text" style="color:var(--text-muted);font-weight:500;margin-top:12px">Select an inbound vessel from the monitor list to initialize the strategic discharge planning sequence.</p>
         </div>
     `;
 }
@@ -160,7 +165,7 @@ function _renderDischargePlanning() {
                 <label class="vp-form-label">3. Rail Rake Allocation</label>
                 <div class="vp-rake-row">
                     <div class="vp-rake-icon">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
                     </div>
                     <div class="vp-rake-slider-wrap">
                         <input type="range" class="vp-slider" id="vpRakeSlider" min="0" max="10" value="${_planConfig.rakes}" step="1">
@@ -224,7 +229,7 @@ function _renderRoutePlanning() {
             <div class="vp-route-header">
                 <div>
                     <h3 class="vp-route-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
                         Rail Route Optimization Engine
                     </h3>
                     <p class="vp-route-sub">Calculate the optimal Port-to-Plant rail path based on cost, transit time, and rake availability.</p>
@@ -258,7 +263,8 @@ function _renderRoutePlanning() {
                         ${_rankedRoutes.map((r, i) => {
                             const opacity = i === 0 ? 1 : 0.3;
                             const dash = i === 0 ? '' : '4,4';
-                            return `<path d="M 28 76 Q ${60 + i * 30} ${50 - i * 10}, 172 24" fill="none" stroke="#3b82f6" stroke-width="${i === 0 ? 2.5 : 1.5}" stroke-dasharray="${dash}" opacity="${opacity}"/>`;
+                            const stroke = i === 0 ? '#2563eb' : '#94a3b8';
+                            return `<path d="M 28 76 Q ${60 + i * 30} ${50 - i * 10}, 172 24" fill="none" stroke="${stroke}" stroke-width="${i === 0 ? 2.5 : 1.5}" stroke-dasharray="${dash}" opacity="${opacity}"/>`;
                         }).join('')}
                     </svg>
                 </div>
@@ -267,7 +273,7 @@ function _renderRoutePlanning() {
             <!-- Optimization Objective -->
             <div class="vp-objective-card">
                 <div class="vp-objective-label">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                     Optimization Objective
                 </div>
                 <div class="vp-objective-options">
@@ -302,16 +308,16 @@ function _renderRoutePlanning() {
                 ${_rankedRoutes.map((route, i) => {
                     const isSelected = _selectedRoute?.id === route.id;
                     const badges = {
-                        cheapest: { bg: '#dbeafe', text: '#3b82f6', label: 'CHEAPEST' },
-                        balanced: { bg: '#e5e7eb', text: '#4b5563', label: 'BALANCED' },
-                        fastest:  { bg: '#fce7f3', text: '#ec4899', label: 'FASTEST' },
+                        cheapest: { bg: '#eff6ff', text: '#2563eb', label: 'CHEAPEST' },
+                        balanced: { bg: '#f8fafc', text: '#475569', label: 'BALANCED' },
+                        fastest:  { bg: '#fdf2f8', text: '#db2777', label: 'FASTEST' },
                     };
                     const badge = badges[route.tag] || badges.balanced;
                     const rakeColor = route.rakeLevel === 'High' ? '#ef4444' : route.rakeLevel === 'Medium' ? '#f59e0b' : '#10b981';
 
                     return `
                     <div class="vp-route-card ${isSelected ? 'vp-route-card--selected' : ''}" data-rid="${route.id}">
-                        ${i === 0 ? '<div class="vp-best-badge">⚡ BEST CHOICE</div>' : ''}
+                        ${i === 0 ? '<div class="vp-best-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> OPTIMAL PATH</div>' : ''}
                         <div class="vp-route-card-body">
                             <div class="vp-route-info">
                                 <div class="vp-route-name">Route #${route.routeId}
@@ -324,11 +330,11 @@ function _renderRoutePlanning() {
                             </div>
                             <div class="vp-route-metrics">
                                 <div class="vp-metric">
-                                    <div class="vp-metric-label">₹ Cost</div>
-                                    <div class="vp-metric-val" style="color:#3b82f6">₹${route.cost}</div>
+                                    <div class="vp-metric-label">Landed Cost</div>
+                                    <div class="vp-metric-val" style="color:var(--primary)">₹${route.cost}</div>
                                 </div>
                                 <div class="vp-metric">
-                                    <div class="vp-metric-label">⏱ Time</div>
+                                    <div class="vp-metric-label">Transit Time</div>
                                     <div class="vp-metric-val">${route.time}h</div>
                                 </div>
                                 <div class="vp-metric">

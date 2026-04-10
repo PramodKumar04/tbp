@@ -12,7 +12,7 @@ export function renderKPIs(container, summaryData) {
 
     const {
         totalCost = 0,
-        optimizedCost = 1,
+        optimizedCost = 0,
         savings = 0,
         delayedVesselsCount = 0,
         rakeUtilization = 0,

@@ -254,72 +254,72 @@ export class DelayPredictor {
         };
     }
 
-    predictVesselDelay(vessel) {
-        if (!this.trained) throw new Error('Model not trained');
+    // === FIXED ML PREDICTOR ===
 
-        const SEASON_MAP = { Winter: 0, 'Pre-Monsoon': 1, Monsoon: 2, 'Post-Monsoon': 3 };
-        const month = new Date(vessel.scheduledETA || Date.now()).getMonth();
-        const season = month >= 11 || month <= 1 ? 'Winter' :
-                      month >= 2 && month <= 4 ? 'Pre-Monsoon' :
-                      month >= 5 && month <= 8 ? 'Monsoon' : 'Post-Monsoon';
+predictVesselDelay(vessel) {
+    if (!this.trained) throw new Error('Model not trained');
 
-        const features = {
-            originDistance: typeof vessel.originDistance === 'number' ? vessel.originDistance : this._getOriginDistance(vessel.origin),
-            seasonIdx: typeof vessel.seasonIdx === 'number' ? vessel.seasonIdx : SEASON_MAP[season],
-            vesselAge: vessel.vesselAge || 10,
-            portCongestion: typeof vessel.portCongestion === 'number' ? vessel.portCongestion : this._getPortCongestion(vessel.destinationPort),
-            weatherScore: this._getWeatherScore(season),
-        };
+    const SEASON_MAP = { Winter: 0, 'Pre-Monsoon': 1, Monsoon: 2, 'Post-Monsoon': 3 };
+    const month = new Date(vessel.scheduledETA || Date.now()).getMonth();
 
-        let prediction = this.basePrediction;
+    const season =
+        month >= 11 || month <= 1 ? 'Winter' :
+        month >= 2 && month <= 4 ? 'Pre-Monsoon' :
+        month >= 5 && month <= 8 ? 'Monsoon' : 'Post-Monsoon';
 
-        const treeOutputs = [];
-        for (const tree of this.trees) {
-            const val = tree.predict(features);
-            treeOutputs.push(val);
-            prediction += this.learningRate * val;
-        }
+    const features = {
+        originDistance: vessel.originDistance ?? this._getOriginDistance(vessel.origin),
+        seasonIdx: vessel.seasonIdx ?? SEASON_MAP[season],
+        vesselAge: vessel.vesselAge ?? 10,
+        portCongestion: vessel.portCongestion ?? this._getPortCongestion(vessel.destinationPort),
+        weatherScore: this._getWeatherScore(season),
+    };
 
-        const confidence = 0.82 + (this.trees.length / 100); 
+    let prediction = this.basePrediction;
 
-        const factors = [];
-        if (season === 'Monsoon') factors.push({ name: 'Monsoon Season', impact: 'high', direction: 'increase' });
-        if (features.portCongestion > 0.7) factors.push({ name: 'Port Congestion', impact: 'high', direction: 'increase' });
-        if (features.weatherScore < 0.5) factors.push({ name: 'Adverse Weather', impact: 'high', direction: 'increase' });
+    for (const tree of this.trees) {
+        const val = tree.predict(features);
+        const update = this.learningRate * val;
 
-        return {
-            predictedDelay: Math.round(prediction * 10) / 10,
-            confidence: Math.round(confidence * 100) / 100,
-            season,
-            factors,
-            treeOutputs: treeOutputs.map(v => Math.round(v * 10) / 10)
-        };
+        // ✅ Gradient clipping (prevents explosion)
+        prediction += Math.max(-20, Math.min(update, 20));
     }
+
+    // ✅ Prediction bounds (real-world constraint)
+    prediction = Math.max(0, Math.min(prediction, 240));
+
+    // ✅ Proper confidence scaling
+    const confidence = Math.min(0.92, 0.6 + this.trees.length * 0.015);
+
+    return {
+        predictedDelay: Math.round(prediction * 10) / 10,
+        confidence: Math.round(confidence * 100) / 100,
+        season,
+        factors: [],
+    };
+}
 
     predictTrainDelay(rake) {
-        const baseDelay = (rake.distance || 500) / 100;
-        const timeOfDay = new Date(rake.departure || Date.now()).getHours();
-        const dayOfWeek = new Date(rake.departure || Date.now()).getDay();
+    const baseDelay = (rake.distance || 500) / 100;
+    const timeOfDay = new Date(rake.departure || Date.now()).getHours();
+    const dayOfWeek = new Date(rake.departure || Date.now()).getDay();
 
-        let delay = baseDelay;
-        if (timeOfDay >= 7 && timeOfDay <= 10) delay *= 1.3;
-        if (timeOfDay >= 17 && timeOfDay <= 20) delay *= 1.25;
-        if (dayOfWeek === 0 || dayOfWeek === 6) delay *= 0.85;
+    let delay = baseDelay;
 
-        delay += (Math.random() - 0.3) * 3;
-        delay = Math.max(-2, delay);
+    if (timeOfDay >= 7 && timeOfDay <= 10) delay *= 1.3;
+    if (timeOfDay >= 17 && timeOfDay <= 20) delay *= 1.25;
+    if (dayOfWeek === 0 || dayOfWeek === 6) delay *= 0.85;
 
-        const confidence = 0.75 + Math.random() * 0.2;
+    delay = Math.max(0, delay); // no negative delays
 
-        return {
-            predictedDelay: Math.round(delay * 10) / 10,
-            confidence: Math.round(confidence * 100) / 100,
-            factors: [
-                ...(delay > 4 ? [{ name: 'Section Congestion', impact: 'medium', direction: 'increase' }] : []),
-                ...(timeOfDay >= 7 && timeOfDay <= 10 ? [{ name: 'Peak Hours', impact: 'low', direction: 'increase' }] : []),
-            ],
-        };
-    }
+    const confidence = 0.75; // deterministic
+
+    return {
+        predictedDelay: Math.round(delay * 10) / 10,
+        confidence,
+        factors: [],
+    };
+}
 
     _getOriginDistance(originName) {
         const distances = {

@@ -54,47 +54,38 @@ function buildModel(vessels, rakes, inventory, dynamicConstraints = {}) {
     
     // For each vessel: prioritize berth assignment
     vessels.forEach((v, i) => {
-        const varName = `berth_${i}`;
-        const port = PORTS.find(p => p.id === v.destinationPort);
-        const portHandling = port?.handlingCost || 320;
-        
-        // ML Integration: Predict delay
-        let mlDelay = 0;
-        if (predictor && predictor.trained) {
-            try {
-                const pred = predictor.predictVesselDelay(v);
-                mlDelay = pred.predictedDelay || 0;
-                // Apply ML constraints to delay logic
-                if (pred.season === 'Monsoon') mlDelay *= monsoonMultiplier;
-                if (v.vesselAge > (mlConstraints.vesselAgeThreshold || 15)) mlDelay *= 1.25;
-            } catch (e) {
-                mlDelay = (v.delayHours || 0);
-            }
-        } else {
-            mlDelay = (v.delayHours || 0);
+    const varName = `berth_${i}`;
+    const port = PORTS.find(p => p.id === v.destinationPort);
+    const portHandling = port?.handlingCost || 320;
+
+    let mlDelay = 0;
+    if (predictor && predictor.trained) {
+        try {
+            mlDelay = predictor.predictVesselDelay(v).predictedDelay || 0;
+        } catch {
+            mlDelay = v.delayHours || 0;
         }
+    } else {
+        mlDelay = v.delayHours || 0;
+    }
 
-        const demurrageCost = Math.max(0, (v.demurrageDays || 0) + (mlDelay / 24)) * 
-                             COST_PARAMS.demurragePerDay * COST_PARAMS.usdToInr * delayPenaltyMultiplier * weatherRisk;
+    const demurrageCost =
+        Math.max(0, (v.demurrageDays || 0) + mlDelay / 24) *
+        COST_PARAMS.demurragePerDay *
+        COST_PARAMS.usdToInr;
 
-        // 🟢 CRITICAL FIX: To prevent the model from 'saving' money by not berthing vessels (causing 88% drops),
-        // we add a heavy penalty for NOT assigning a berth.
-        const unassignedVesselPenalty = 50000000; // ₹5 Cr penalty for ignoring a vessel
+    model.variables[varName] = {
+        cost: portHandling * v.quantity + demurrageCost,
+        [`assign_vessel_${i}`]: 1,
+        [`port_${v.destinationPort}_berth`]: 1,
+        [`material_${v.material}_supply`]: v.quantity,
+        total_handled: v.quantity,
+    };
 
-        model.variables[varName] = {
-            // Objective: min cost. If berth_i = 1, cost is (Handling + Demurrage).
-            // If berth_i = 0, cost is 0? NO. We need it to be 1 or it skips.
-            // Simplified: we want to MAXIMIZE berthing. 
-            // Better: Cost = (handling + demurrage) - UNASSIGNED_PENALTY * assigned?
-            // Let's use standard penalty logic:
-            cost: (portHandling * v.quantity + demurrageCost) - unassignedVesselPenalty,
-            [`port_${v.destinationPort}_berth`]: 1,
-            [`material_${v.material}_supply`]: v.quantity,
-            total_handled: v.quantity,
-        };
-
-        model.ints[varName] = 1;
-    });
+    // ✅ HARD constraint: must assign
+    model.constraints[`assign_vessel_${i}`] = { equal: 1 };
+    model.ints[varName] = 1;
+});
 
     // For each rake route: how much to transport
     rakes.forEach((r, i) => {

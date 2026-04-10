@@ -50,13 +50,15 @@ export function renderVesselTracker(container, vessels, predictions) {
                         const eta = v.scheduledETA ? new Date(v.scheduledETA) : null;
                         const etaStr = eta ? formatDateTime(eta) : '—';
                         return `
-                        <tr style="${isBooked ? 'background:rgba(16,185,129,0.04);border-left:3px solid #10b981' : ''}">
+                        <tr style="${isBooked ? 'background:#f0fdf4;border-left:3px solid var(--accent-success)' : ''}">
                             <td>
                                 <div style="display:flex;align-items:center;gap:10px">
-                                    <span style="font-size:1.2rem">🚢</span>
+                                    <span style="font-size:1.2rem;color:var(--text-secondary)">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/></svg>
+                                    </span>
                                     <div>
                                         <div style="font-weight:600;color:var(--text-primary)">${v.name || 'Unknown Vessel'}</div>
-                                        <div style="font-size:0.68rem;color:var(--text-muted)">Age: ${v.vesselAge || '—'}y${isBooked ? ' &nbsp;<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:1px 5px;border-radius:8px;font-size:0.6rem;font-weight:700">📋 BOOKED</span>' : ''}</div>
+                                        <div style="font-size:0.68rem;color:var(--text-muted)">Age: ${v.vesselAge || '—'}y${isBooked ? ' &nbsp;<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:8px;font-size:0.6rem;font-weight:700">BOOKED</span>' : ''}</div>
                                     </div>
                                 </div>
                             </td>
@@ -93,8 +95,8 @@ export function renderVesselTracker(container, vessels, predictions) {
         </div>
 
         ${delayed > 0 ? `
-            <div style="margin-top:16px;padding:12px 16px;border-radius:var(--radius-md);background:rgba(var(--accent-warning-rgb),0.06);border:1px solid rgba(var(--accent-warning-rgb),0.15)">
-                <div style="font-size:0.82rem;font-weight:600;color:var(--accent-warning);margin-bottom:4px">
+            <div style="margin-top:16px;padding:12px 16px;border-radius:var(--radius-md);background:#fffbeb;border:1px solid #fde68a">
+                <div style="font-size:0.82rem;font-weight:600;color:#b45309;margin-bottom:4px">
                     ⚠️ ${delayed} vessel(s) experiencing delays
                 </div>
                 <div style="font-size:0.72rem;color:var(--text-muted)">

@@ -61,6 +61,9 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
             return cleanupAndRespond(res, req.file, 400, 'Unsupported file format');
         }
 
+        // 🗑️ Delete previous data of the same type for this user (Reliability: Latest Only)
+        await OptimizationData.deleteMany({ userId: req.userId, type });
+
         // 💾 Save to DB
         const newData = new OptimizationData({
             userId: req.userId,

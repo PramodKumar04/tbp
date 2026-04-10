@@ -8,6 +8,9 @@ async function saveOptimization(req, res, next) {
             return res.status(400).json({ error: 'totalCost is required' });
         }
 
+        // 🗑️ Overwrite previous results (Reliability: Maintain only the latest optimized state)
+        await OptimizationResult.deleteMany({ userId: req.userId });
+
         const doc = new OptimizationResult({
             userId: req.userId,
             totalCost,

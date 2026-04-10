@@ -15,6 +15,9 @@ async function saveVesselPlan(req, res, next) {
             return res.status(400).json({ error: 'vesselId, vesselName and numeric cost required' });
         }
 
+        // 🗑️ Delete previous plan for this specific vessel (Reliability: Latest plan version only)
+        await VesselPlan.deleteMany({ userId: req.userId, vesselId });
+
         const doc = new VesselPlan({
             userId: req.userId,
             vesselId, vesselName, origin, originCountry,
