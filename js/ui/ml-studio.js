@@ -367,31 +367,59 @@ function renderPredictionsOutput() {
 }
 
 function generateSyntheticTrainingData() {
+    // ── Balanced, realistic training data covering the full feature space ──────
+    // Each feature independently varies so the model must use ALL of them,
+    // not just collapse to the dominant signal (seasonIdx).
     const data = [];
-    const origins = ['Newcastle', 'Richards Bay', 'Hay Point', 'Qinhuangdao', 'Puerto Bolivar', 'Murmansk', 'Maputo'];
-    const originDist = { Newcastle: 18, 'Richards Bay': 14, 'Hay Point': 20, Qinhuangdao: 12, 'Puerto Bolivar': 28, Murmansk: 22, Maputo: 10 };
-    const ports = ['paradip', 'haldia', 'vizag', 'dhamra'];
-    const seasons = [0, 1, 2, 3]; // Winter, Pre-Monsoon, Monsoon, Post-Monsoon
 
-    for (let i = 0; i < 200; i++) {
-        const origin = origins[Math.floor(Math.random() * origins.length)];
-        const seasonIdx = seasons[Math.floor(Math.random() * 4)];
-        const portCongestion = 0.3 + Math.random() * 0.6;
-        const weatherScore = 0.4 + Math.random() * 0.5;
-        const vesselAge = 5 + Math.floor(Math.random() * 20);
-        const originDistance = originDist[origin];
+    const ORIGINS = [
+        { name: 'Newcastle',      dist: 18 },
+        { name: 'Richards Bay',   dist: 14 },
+        { name: 'Hay Point',      dist: 20 },
+        { name: 'Qinhuangdao',   dist: 12 },
+        { name: 'Puerto Bolivar', dist: 28 },
+        { name: 'Murmansk',       dist: 22 },
+        { name: 'Maputo',         dist: 10 },
+    ];
+    const PORTS = ['paradip', 'haldia', 'vizag', 'dhamra'];
 
-        // Realistic delay model
-        let baseDelay = seasonIdx === 2 ? 36 : seasonIdx === 1 ? 18 : 12;
-        baseDelay += portCongestion * 20;
-        baseDelay += (1 - weatherScore) * 24;
-        baseDelay += (originDistance / 28) * 12;
-        baseDelay += (Math.random() - 0.5) * 20; // noise
+    // Season configs: realistic weather and congestion distributions per season
+    const SEASON_CONFIGS = [
+        // [seasonIdx, weatherScoreRange, congestionRange, baseDelay]
+        { idx: 0, weatherMin: 0.70, weatherMax: 0.98, congMin: 0.25, congMax: 0.60, base: 8  }, // Winter
+        { idx: 1, weatherMin: 0.55, weatherMax: 0.85, congMin: 0.35, congMax: 0.70, base: 14 }, // Pre-Monsoon
+        { idx: 2, weatherMin: 0.20, weatherMax: 0.55, congMin: 0.55, congMax: 0.90, base: 30 }, // Monsoon
+        { idx: 3, weatherMin: 0.60, weatherMax: 0.80, congMin: 0.30, congMax: 0.65, base: 11 }, // Post-Monsoon
+    ];
+
+    function rand(min, max) { return min + Math.random() * (max - min); }
+
+    for (let i = 0; i < 300; i++) {  // 300 records for better coverage
+        const origin  = ORIGINS[Math.floor(Math.random() * ORIGINS.length)];
+        const season  = SEASON_CONFIGS[Math.floor(Math.random() * 4)];
+        const vesselAge = Math.floor(rand(1, 30));   // 1–30 years
+
+        // Feature-correlated values (weather is worse in monsoon, etc.)
+        const weatherScore   = rand(season.weatherMin, season.weatherMax);
+        const portCongestion = rand(season.congMin,    season.congMax);
+
+        // Delay model: each factor contributes independently and additively
+        let delay = season.base;                                  // seasonal baseline
+        delay += portCongestion > 0.70 ? rand(8, 28)   : rand(-2, 8);   // congestion
+        delay += weatherScore   < 0.50 ? rand(12, 40)  : rand(-4, 6);   // weather
+        delay += origin.dist > 20      ? rand(4, 16)   : rand(-2, 6);   // long haul
+        delay += vesselAge > 18        ? rand(4, 14)   : rand(-2, 4);   // vessel age
+        delay += rand(-8, 8);                                    // pure noise
 
         data.push({
-            originDistance, seasonIdx, vesselAge, portCongestion, weatherScore,
-            origin, port: ports[Math.floor(Math.random() * ports.length)],
-            actualDelay: Math.max(0, Math.round(baseDelay))
+            originDistance: origin.dist,
+            seasonIdx:      season.idx,
+            vesselAge,
+            portCongestion: Math.round(portCongestion * 100) / 100,
+            weatherScore:   Math.round(weatherScore   * 100) / 100,
+            origin:         origin.name,
+            port:           PORTS[Math.floor(Math.random() * PORTS.length)],
+            actualDelay:    Math.max(0, Math.round(delay)),
         });
     }
     return data;

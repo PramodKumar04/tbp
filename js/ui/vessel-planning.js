@@ -7,8 +7,10 @@ import { PORTS, PLANTS, RAIL_ROUTES, COST_PARAMS, MATERIALS } from '../data/cons
 import { apiFetch } from '../utils/api.js';
 
 let _vessels = [];
+let _routeCandidates = [];
+let _derivedVessels = [];
 let _selectedVessel = null;
-let _step = 'select';  // 'select' | 'discharge' | 'route'
+let _step = 'route';  // 'route' | 'vessel' | 'rake'
 let _planConfig = { portId: '', plantId: '', rakes: 2, objective: 'cost' };
 let _rankedRoutes = [];
 let _selectedRoute = null;
@@ -25,13 +27,98 @@ const STATUS_COLORS = {
     'anchorage':  { bg: '#fef2f2', text: '#991b1b', label: 'Anchorage' },
 };
 
+function normalizeRouteCandidates(routes = []) {
+    return (Array.isArray(routes) ? routes : []).map((route, index) => {
+        const snap = route.selectedRoute || route.routeSnapshot || route.route || route;
+        const vessel = route.vessel || route.vesselSnapshot || {};
+        const routeId = snap.routeId || route.routeId || route.id || route.rakeNumber || `route_${index + 1}`;
+        const fromPort = snap.fromPort || route.fromPort || route.portId || route.sourcePort || route.destinationPort || route.port || '';
+        const toPlant = snap.toPlant || route.toPlant || route.plantId || route.targetPlantId || route.targetPlant || '';
+        const fromPortName = snap.fromPortName || route.fromPortName || route.portName || route.port || route.sourcePortName || fromPort || 'Unknown Port';
+        const toPlantName = snap.toPlantName || route.toPlantName || route.plantName || route.targetPlant || toPlant || 'Unknown Plant';
+        const quantity = Number(route.quantity || route.cargo?.quantity || snap.quantity || vessel.quantity || 0);
+        const cost = Number(route.cost || route.railCost || snap.railCost || snap.cost || route.totalCost || 0);
+        const time = Number(route.time || snap.avgTime || route.avgTime || 0);
+        const vesselId = route.vesselId || vessel.id || route.id || snap.vesselId || '';
+        const vesselName = route.vesselName || vessel.name || route.vessel || snap.vesselName || route.name || '';
+        return {
+            ...route,
+            id: route.id || `${routeId}_${index}`,
+            routeId,
+            fromPort,
+            toPlant,
+            fromPortName,
+            toPlantName,
+            quantity,
+            cost,
+            time,
+            vesselId,
+            vesselName,
+            routeName: route.routeName || `${fromPortName} → ${toPlantName}`,
+            routeSnapshot: snap,
+            vesselSnapshot: vessel,
+            routeSource: route,
+        };
+    });
+}
+
+function buildVesselOptionsFromRoutes(routes = []) {
+    return (Array.isArray(routes) ? routes : []).map((route, index) => {
+        const vessel = route.vessel || route.vesselSnapshot || {};
+        const routeMeta = route.selectedRoute || route.routeSnapshot || route.route || route;
+        const vesselId = vessel.id || route.vesselId || route.id || `route_vessel_${index + 1}`;
+        const quantity = Number(route.quantity || route.cargo?.quantity || vessel.quantity || 0);
+        return {
+            id: vesselId,
+            vesselId,
+            name: vessel.name || route.vesselName || `Vessel ${index + 1}`,
+            origin: vessel.origin || route.fromPortName || 'Optimized Route',
+            originCountry: vessel.originCountry || '',
+            destinationPort: vessel.destinationPort || route.fromPort || route.portId || '',
+            destinationPortName: vessel.destinationPortName || route.fromPortName || route.portName || '',
+            material: vessel.material || route.material || routeMeta.material || 'coal',
+            materialName: vessel.materialName || route.materialName || routeMeta.materialName || (route.material ? String(route.material) : 'Coal'),
+            quantity,
+            scheduledETA: vessel.scheduledETA || route.eta || new Date().toISOString(),
+            actualETA: vessel.actualETA || route.eta || new Date().toISOString(),
+            delayHours: Number(vessel.delayHours || route.delayHours || 0),
+            status: vessel.status || route.status || 'on-time',
+            berthAssigned: vessel.berthAssigned || 1,
+            freightCost: Number(vessel.freightCost || route.cost || route.railCost || 0),
+        };
+    });
+}
+
+function getVisibleVessels() {
+    return _vessels.length ? _vessels : _derivedVessels;
+}
+
 /**
  * Public API: Render the vessel planning panel
  */
-export function renderVesselPlanning(container, vessels, onPlanConfirmed) {
+export function renderVesselPlanning(container, vesselsOrContext, onPlanConfirmed) {
     _container = container;
-    _vessels = vessels || [];
     _onPlanConfirmed = onPlanConfirmed;
+
+    const context = Array.isArray(vesselsOrContext)
+        ? { vessels: vesselsOrContext }
+        : (vesselsOrContext || {});
+
+    _vessels = Array.isArray(context.vessels) ? context.vessels : [];
+    _routeCandidates = normalizeRouteCandidates(
+        context.optimizedRoutes || context.routeHistory || context.routes || context.activeRoutes || []
+    );
+    _derivedVessels = buildVesselOptionsFromRoutes(_routeCandidates);
+    if (!_vessels.length && Array.isArray(context.plannedVessels) && context.plannedVessels.length) {
+        _vessels = context.plannedVessels;
+    }
+
+    _step = 'route';
+    _selectedVessel = null;
+    _selectedRoute = null;
+    _rankedRoutes = [];
+    _planConfig = { portId: '', plantId: '', rakes: 2, objective: 'cost' };
+
     _render();
 }
 
@@ -50,13 +137,18 @@ function _render() {
 // LEFT SIDEBAR — Vessel List
 // ═══════════════════════════════════════════════════════════
 function _renderVesselList() {
+    if (_step === 'route' && _routeCandidates.length > 0) {
+        return _renderRouteSidebar();
+    }
+
+    const vessels = getVisibleVessels();
     return `
         <div class="vp-list-header">
             <h3 class="vp-list-title">Inbound Vessels</h3>
-            <p class="vp-list-sub">Select a vessel to plan discharge</p>
+            <p class="vp-list-sub">${_selectedRoute ? 'Select a vessel for the optimized route' : 'Select a vessel to plan discharge'}</p>
         </div>
         <div class="vp-list">
-            ${_vessels.length > 0 ? _vessels.map(v => {
+            ${vessels.length > 0 ? vessels.map(v => {
                 const sc = STATUS_COLORS[v.status] || STATUS_COLORS['in-transit'];
                 const isActive = _selectedVessel?.id === v.id;
                 const mat = MATERIALS.find(m => m.id === v.material);
@@ -89,9 +181,48 @@ function _renderVesselList() {
             }).join('') : `
                 <div style="padding:40px 20px;text-align:center;color:var(--text-muted)">
                     <div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">NO ACTIVE VESSELS</div>
-                    <div style="font-size:0.68rem">Please upload operational data in the Data Gateway to begin planning.</div>
+                    <div style="font-size:0.68rem">${_routeCandidates.length > 0 ? 'Choose an optimized route first to derive vessel options.' : 'Run optimization on uploaded shipments to create vessel planning data.'}</div>
                 </div>
-            `}
+            `} 
+        </div>
+    `;
+}
+
+function _renderRouteSidebar() {
+    return `
+        <div class="vp-list-header">
+            <h3 class="vp-list-title">Optimized Routes</h3>
+            <p class="vp-list-sub">Pick a route first, then assign the vessel</p>
+        </div>
+        <div class="vp-list">
+            ${_routeCandidates.map((route) => {
+                const isActive = _selectedRoute?.id === route.id;
+                return `
+                    <div class="vp-vessel-card ${isActive ? 'vp-vessel-card--active' : ''}" data-rid="${route.id}" data-role="route">
+                        <div class="vp-vessel-top">
+                            <div class="vp-vessel-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v4H4z"/><path d="M4 10h16v10H4z"/><path d="M8 14h8"/></svg>
+                            </div>
+                            <h4 class="vp-vessel-name">Route #${route.routeId}</h4>
+                            <span class="vp-status-badge" style="background:#eff6ff;color:#1d4ed8">OPTIMIZED</span>
+                        </div>
+                        <div class="vp-vessel-meta">
+                            <div class="vp-meta-row">
+                                <span class="vp-meta-label">Path:</span>
+                                <span class="vp-meta-value">${route.fromPortName} → ${route.toPlantName}</span>
+                                <span class="vp-meta-label" style="margin-left:auto">Cost:</span>
+                                <span class="vp-meta-value">₹${Math.round(route.cost || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="vp-meta-row">
+                                <span class="vp-meta-label">Vessel:</span>
+                                <span class="vp-meta-value">${route.vesselName || 'Derived from optimization'}</span>
+                                <span class="vp-meta-label" style="margin-left:auto">Time:</span>
+                                <span class="vp-meta-value">${route.time || route.routeSnapshot?.avgTime || 0}h</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
 }
@@ -100,9 +231,11 @@ function _renderVesselList() {
 // RIGHT PANEL — Dynamic based on step
 // ═══════════════════════════════════════════════════════════
 function _renderMainPanel() {
-    if (!_selectedVessel) return _renderEmptyState();
     if (_step === 'route') return _renderRoutePlanning();
-    return _renderDischargePlanning();
+    if (_step === 'vessel') return _renderVesselSelection();
+    if (_step === 'rake') return _renderRakePlanning();
+    if (!_selectedVessel) return _renderEmptyState();
+    return _renderRakePlanning();
 }
 
 function _renderEmptyState() {
@@ -120,8 +253,133 @@ function _renderEmptyState() {
     `;
 }
 
+function _buildRankedRoutesFromOptimizedData() {
+    const source = Array.isArray(_routeCandidates) ? _routeCandidates : [];
+    const ranked = source.map((route, index) => {
+        const cost = Number(route.cost || route.railCost || route.routeSnapshot?.railCost || route.routeSnapshot?.cost || 0);
+        const time = Number(route.time || route.routeSnapshot?.avgTime || 0);
+        const quantity = Number(route.quantity || route.routeSnapshot?.quantity || route.vesselSnapshot?.quantity || 0);
+        const routeId = route.routeId || route.routeSnapshot?.routeId || `R${index + 1}`;
+        return {
+            ...route,
+            id: route.id || `${routeId}_${index}`,
+            routeId,
+            via: route.via || route.routeName || `${route.fromPortName || route.fromPort || '?'} -> ${route.toPlantName || route.toPlant || '?'}`,
+            cost,
+            time,
+            quantity,
+            rakeLevel: route.rakeLevel || route.routeSnapshot?.rakeLevel || (quantity > COST_PARAMS.rakeCapacity * 2 ? 'High' : 'Medium'),
+            tag: route.tag || 'balanced',
+            score: _planConfig.objective === 'time' ? time : _planConfig.objective === 'rakes' ? -quantity : cost,
+        };
+    }).filter(route => route.fromPortName || route.toPlantName || route.vesselName || route.vesselId);
+
+    ranked.sort((a, b) => a.score - b.score);
+    return ranked.slice(0, 5);
+}
+
+function _renderNoOptimizationState() {
+    return `
+        <div class="vp-empty">
+            <div class="vp-empty-icon">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16v16H4z"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                </svg>
+            </div>
+            <p class="vp-empty-text" style="color:var(--text-muted);font-weight:500;margin-top:12px">
+                No optimized shipment path is available yet. Upload shipment data, run optimization, and then return here to assign the vessel.
+            </p>
+        </div>
+    `;
+}
+
+function _renderVesselSelection() {
+    const route = _selectedRoute;
+    const vesselPool = getVisibleVessels();
+    const routePort = route?.fromPort || _planConfig.portId;
+    const routePlant = route?.toPlant || _planConfig.plantId;
+    const matchingVessels = vesselPool.filter(v => {
+        const portMatch = !routePort || v.destinationPort === routePort || v.destinationPortName === route.fromPortName;
+        const vesselMatch = !route?.vesselId || String(v.id) === String(route.vesselId);
+        const materialMatch = !route?.material || !v.material || route.material === v.material;
+        return portMatch && materialMatch && (vesselMatch || portMatch);
+    });
+
+    const vessels = matchingVessels.length ? matchingVessels : vesselPool;
+
+    if (!route) {
+        return _renderNoOptimizationState();
+    }
+
+    return `
+        <div class="vp-discharge">
+            <div class="vp-plan-header">
+                <div>
+                    <div class="vp-plan-vessel-name">Select Vessel for ${route?.routeName || `Route #${route?.routeId || 'Optimized'}`}</div>
+                    <div class="vp-plan-subtitle">Choose the vessel that will use the optimized rail path</div>
+                </div>
+                <div class="vp-plan-qty">
+                    <span class="vp-plan-qty-num">${vessels.length}</span>
+                    <span class="vp-plan-qty-unit">Choices</span>
+                    <div class="vp-plan-qty-label">Matched by route</div>
+                </div>
+            </div>
+
+            <div class="vp-routes-header">
+                <h4>Available Vessels</h4>
+                <span class="vp-sort-label">Filtered by optimized route and cargo compatibility</span>
+            </div>
+
+            <div class="vp-routes-list">
+                ${vessels.map((v, index) => {
+                    const isSelected = _selectedVessel?.id === v.id;
+                    const sc = STATUS_COLORS[v.status] || STATUS_COLORS['in-transit'];
+                    return `
+                        <div class="vp-route-card ${isSelected ? 'vp-route-card--selected' : ''}" data-vid="${v.id}" data-role="vessel">
+                            ${index === 0 ? '<div class="vp-best-badge">OPTIMAL MATCH</div>' : ''}
+                            <div class="vp-route-card-body">
+                                <div class="vp-route-info">
+                                    <div class="vp-route-name">${v.name}<span class="vp-route-tag" style="background:${sc.bg};color:${sc.text}">${sc.label}</span></div>
+                                    <div class="vp-route-via">Origin: ${v.origin || 'Unknown'}${v.destinationPortName ? ` • Port: ${v.destinationPortName}` : ''}</div>
+                                </div>
+                                <div class="vp-route-metrics">
+                                    <div class="vp-metric">
+                                        <div class="vp-metric-label">Material</div>
+                                        <div class="vp-metric-val">${v.materialName || v.material || '—'}</div>
+                                    </div>
+                                    <div class="vp-metric">
+                                        <div class="vp-metric-label">Quantity</div>
+                                        <div class="vp-metric-val">${Math.round((v.quantity || 0)).toLocaleString()} MT</div>
+                                    </div>
+                                    <div class="vp-metric">
+                                        <div class="vp-metric-label">ETA</div>
+                                        <div class="vp-metric-val">${new Date(v.actualETA || v.scheduledETA || Date.now()).toLocaleDateString('en-IN')}</div>
+                                    </div>
+                                </div>
+                                <div class="vp-route-radio">
+                                    <div class="vp-radio-circle ${isSelected ? 'vp-radio-circle--active' : ''}"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+
+            <div class="vp-bottom-bar vp-bottom-bar--route">
+                <div class="vp-selected-label">Selected Route: <span style="color:${route ? '#3b82f6' : '#94a3b8'};font-weight:600">${route ? `Route #${route.routeId}` : 'None'}</span></div>
+                <div class="vp-bottom-actions">
+                    <button type="button" class="vp-btn vp-btn-ghost" id="vpBackBtn">Back</button>
+                    <button type="button" class="vp-btn vp-btn-primary vp-btn-lg ${!_selectedVessel ? 'vp-btn--disabled' : ''}" id="vpConfirmVesselBtn" ${!_selectedVessel ? 'disabled' : ''}>Next: Select Rakes</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // ─── Step 1: Discharge Planning ─────────────────────────
-function _renderDischargePlanning() {
+function _renderRakePlanning() {
     const v = _selectedVessel;
     const mat = MATERIALS.find(m => m.id === v.material);
     const port = PORTS.find(p => p.id === (_planConfig.portId || v.destinationPort));
@@ -135,7 +393,7 @@ function _renderDischargePlanning() {
                     <div class="vp-plan-vessel-name">${v.name}
                         <span class="vp-id-badge">ID: ${v.id.substring(0, 6)}</span>
                     </div>
-                    <div class="vp-plan-subtitle">Ready for Discharge Planning</div>
+                    <div class="vp-plan-subtitle">Select rake allocation for the optimized route and vessel</div>
                 </div>
                 <div class="vp-plan-qty">
                     <span class="vp-plan-qty-num">${v.quantity.toLocaleString()}</span>
@@ -144,25 +402,28 @@ function _renderDischargePlanning() {
                 </div>
             </div>
 
-            <!-- Port & Plant Selection -->
-            <div class="vp-form-row">
-                <div class="vp-form-col">
-                    <label class="vp-form-label">1. Select Discharge Port</label>
-                    <select class="vp-select" id="vpPortSelect">
-                        ${PORTS.map(p => `<option value="${p.id}" ${p.id === (port?.id || v.destinationPort) ? 'selected' : ''}>${p.name} (Stock: ${Math.round(p.maxStockyard / 1000)}k)</option>`).join('')}
-                    </select>
+            <div class="vp-summary-cards">
+                <div class="vp-summary-item">
+                    <div class="vp-summary-val">${_selectedRoute?.routeName || `${port?.name || 'Port'} → ${PLANTS.find(p => p.id === _selectedRoute?.toPlant)?.name || 'Plant'}`}</div>
+                    <div class="vp-summary-lbl">Optimized Path</div>
                 </div>
-                <div class="vp-form-col">
-                    <label class="vp-form-label">2. Target Plant</label>
-                    <select class="vp-select" id="vpPlantSelect">
-                        ${PLANTS.map(p => `<option value="${p.id}" ${p.id === _planConfig.plantId ? 'selected' : ''}>${p.name}</option>`).join('')}
-                    </select>
+                <div class="vp-summary-item">
+                    <div class="vp-summary-val">${v.name}</div>
+                    <div class="vp-summary-lbl">Selected Vessel</div>
+                </div>
+                <div class="vp-summary-item">
+                    <div class="vp-summary-val">${port?.name || v.destinationPortName || 'Port'}</div>
+                    <div class="vp-summary-lbl">Discharge Port</div>
+                </div>
+                <div class="vp-summary-item">
+                    <div class="vp-summary-val">${PLANTS.find(p => p.id === _selectedRoute?.toPlant)?.name || _planConfig.plantId || 'Plant'}</div>
+                    <div class="vp-summary-lbl">Target Plant</div>
                 </div>
             </div>
 
             <!-- Rake Allocation Slider -->
             <div class="vp-rake-section">
-                <label class="vp-form-label">3. Rail Rake Allocation</label>
+                <label class="vp-form-label">1. Rail Rake Allocation</label>
                 <div class="vp-rake-row">
                     <div class="vp-rake-icon">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
@@ -205,8 +466,8 @@ function _renderDischargePlanning() {
             <!-- Next Button -->
             <div class="vp-bottom-bar">
                 <div></div>
-                <button class="vp-btn vp-btn-primary vp-btn-lg" id="vpNextBtn">
-                    Next: Optimize Rail Route
+                <button type="button" class="vp-btn vp-btn-primary vp-btn-lg" id="vpBookBtn">
+                    Book Rakes &amp; Save Plan
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
             </div>
@@ -216,12 +477,18 @@ function _renderDischargePlanning() {
 
 // ─── Step 2: Route Optimization ─────────────────────────
 function _renderRoutePlanning() {
-    const v = _selectedVessel;
+    const v = _selectedVessel || getVisibleVessels()[0] || {};
     const port = PORTS.find(p => p.id === _planConfig.portId);
     const plant = PLANTS.find(p => p.id === _planConfig.plantId);
 
-    // Generate ranked routes
-    if (_rankedRoutes.length === 0) _generateRoutes();
+    // Show only optimized shipment paths; never synthesize random routes here.
+    if (_rankedRoutes.length === 0) {
+        _rankedRoutes = _buildRankedRoutesFromOptimizedData();
+    }
+
+    if (_rankedRoutes.length === 0) {
+        return _renderNoOptimizationState();
+    }
 
     return `
         <div class="vp-route">
@@ -356,10 +623,10 @@ function _renderRoutePlanning() {
                     Selected Route: <span style="color:${_selectedRoute ? '#3b82f6' : '#94a3b8'};font-weight:600">${_selectedRoute ? 'Route #' + _selectedRoute.routeId : 'None'}</span>
                 </div>
                 <div class="vp-bottom-actions">
-                    <button class="vp-btn vp-btn-ghost" id="vpBackBtn">Cancel</button>
-                    <button class="vp-btn vp-btn-primary vp-btn-lg ${!_selectedRoute ? 'vp-btn--disabled' : ''}" id="vpConfirmBtn" ${!_selectedRoute ? 'disabled' : ''}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                        Confirm Plan
+                    <button type="button" class="vp-btn vp-btn-ghost" id="vpBackBtn">Cancel</button>
+                    <button type="button" class="vp-btn vp-btn-primary vp-btn-lg ${!_selectedRoute ? 'vp-btn--disabled' : ''}" id="vpConfirmBtn" ${!_selectedRoute ? 'disabled' : ''}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                        Next: Select Vessel
                     </button>
                 </div>
             </div>
@@ -423,21 +690,36 @@ function _generateRoutes() {
 function _bindEvents() {
     if (!_container) return;
 
-    // Vessel card clicks
-    _container.querySelectorAll('.vp-vessel-card').forEach(card => {
-        card.addEventListener('click', () => {
+    // Route / vessel card clicks
+    _container.addEventListener('click', (event) => {
+        const card = event.target.closest('.vp-vessel-card, .vp-route-card');
+        if (!card || !_container.contains(card)) return;
+
+        const role = card.dataset.role || (card.dataset.rid ? 'route' : card.dataset.vid ? 'vessel' : '');
+        if (role === 'route') {
+            const rid = card.dataset.rid;
+            _selectedRoute = _rankedRoutes.find(r => r.id === rid || r.routeId === rid);
+            if (!_selectedRoute) return;
+            _step = 'vessel';
+            _selectedVessel = null;
+            _planConfig.portId = _selectedRoute.fromPort || '';
+            _planConfig.plantId = _selectedRoute.toPlant || '';
+            _render();
+            return;
+        }
+
+        if (role === 'vessel') {
             const vid = card.dataset.vid;
-            const vessel = _vessels.find(v => v.id === vid);
+            const vessels = getVisibleVessels();
+            const vessel = vessels.find(v => String(v.id) === String(vid));
             if (!vessel) return;
             _selectedVessel = vessel;
-            _step = 'discharge';
-            _planConfig.portId = vessel.destinationPort;
-            _planConfig.plantId = PLANTS[0].id;
-            _planConfig.rakes = 2;
-            _selectedRoute = null;
-            _rankedRoutes = [];
+            _step = 'rake';
+            _planConfig.portId = vessel.destinationPort || _planConfig.portId;
+            _planConfig.plantId = _selectedRoute?.toPlant || _planConfig.plantId || PLANTS[0].id;
+            _planConfig.rakes = Math.max(1, Math.ceil((vessel.quantity || 0) / COST_PARAMS.rakeCapacity));
             _render();
-        });
+        }
     });
 
     // Port/Plant selects
@@ -460,14 +742,6 @@ function _bindEvents() {
         });
     }
 
-    // Next button
-    _container.querySelector('#vpNextBtn')?.addEventListener('click', () => {
-        _step = 'route';
-        _rankedRoutes = [];
-        _selectedRoute = null;
-        _render();
-    });
-
     // Objective radio buttons
     _container.querySelectorAll('input[name="vpObjective"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -478,27 +752,38 @@ function _bindEvents() {
         });
     });
 
-    // Route card selection
-    _container.querySelectorAll('.vp-route-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const rid = card.dataset.rid;
-            _selectedRoute = _rankedRoutes.find(r => r.id === rid);
-            _render();
-        });
+    _container.querySelector('#vpConfirmVesselBtn')?.addEventListener('click', () => {
+        if (!_selectedRoute || !_selectedVessel) return;
+        _step = 'rake';
+        _planConfig.portId = _selectedRoute.fromPort || _selectedVessel.destinationPort || '';
+        _planConfig.plantId = _selectedRoute.toPlant || _planConfig.plantId || PLANTS[0].id;
+        _planConfig.rakes = Math.max(1, Math.ceil((_selectedVessel.quantity || 0) / COST_PARAMS.rakeCapacity));
+        _render();
     });
 
     // Back / Cancel
     _container.querySelector('#vpBackBtn')?.addEventListener('click', () => {
-        _step = 'discharge';
-        _selectedRoute = null;
+        if (_step === 'vessel') {
+            _step = 'route';
+            _selectedRoute = null;
+        } else {
+            _step = _selectedRoute ? 'vessel' : 'route';
+        }
         _render();
     });
 
-    // Confirm Plan
-    _container.querySelector('#vpConfirmBtn')?.addEventListener('click', async () => {
+    // Route selection -> vessel selection
+    _container.querySelector('#vpConfirmBtn')?.addEventListener('click', () => {
+        if (!_selectedRoute) return;
+        _step = 'vessel';
+        _render();
+    });
+
+    // Final booking
+    _container.querySelector('#vpBookBtn')?.addEventListener('click', async () => {
         if (!_selectedRoute || !_selectedVessel) return;
 
-        const btn = _container.querySelector('#vpConfirmBtn');
+        const btn = _container.querySelector('#vpBookBtn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
 
         const v = _selectedVessel;
@@ -514,6 +799,7 @@ function _bindEvents() {
             plant,
             rakes: _planConfig.rakes,
             route: _selectedRoute,
+            rake: _selectedRoute,
             objective: _planConfig.objective,
         };
 
@@ -543,6 +829,8 @@ function _bindEvents() {
                     portId: port?.id || '',
                     plantId: plant?.id || '',
                     route: _selectedRoute,
+                    vessel: v,
+                    rake: _selectedRoute,
                     rakes: _planConfig.rakes,
                     cost: totalCost,
                     cargo: { quantity: v.quantity, material: v.material }
@@ -574,7 +862,7 @@ function _bindEvents() {
 
         // Reset wizard
         _selectedVessel = null;
-        _step = 'select';
+        _step = 'route';
         _selectedRoute = null;
         _rankedRoutes = [];
         _render();
@@ -583,7 +871,7 @@ function _bindEvents() {
 
 export function resetVesselPlanning() {
     _selectedVessel = null;
-    _step = 'select';
+    _step = 'route';
     _selectedRoute = null;
     _rankedRoutes = [];
 }

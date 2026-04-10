@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const OptimizationResultSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     timestamp: { type: Date, default: Date.now },
+    feasible: { type: Boolean, default: true },
     totalCost: { type: Number, required: true },
     costBreakdown: {
         freight:      { type: Number, default: 0 },
@@ -13,6 +14,8 @@ const OptimizationResultSchema = new mongoose.Schema({
     },
     vesselSchedule: { type: Array, default: [] },
     railPlan:       { type: Array, default: [] },
+    routeHistory:   { type: Array, default: [] },
+    routeAlternatives: { type: Array, default: [] },
     savings: {
         totalSaved:             { type: Number, default: 0 },
         percentSaved:           { type: Number, default: 0 },
@@ -20,7 +23,11 @@ const OptimizationResultSchema = new mongoose.Schema({
         demurragePercentSaved:  { type: Number, default: 0 },
         supplyReliability:      { type: Number, default: 85 }
     },
-    meta: { type: Object, default: {} }
+    meta: { type: Object, default: {} },
+    mlConstraints: { type: Object, default: {} },
+    sourceMeta: { type: Object, default: {} },
+    inputSnapshot: { type: Object, default: {} },
+    optimizedAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('OptimizationResult', OptimizationResultSchema);

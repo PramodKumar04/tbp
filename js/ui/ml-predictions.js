@@ -14,9 +14,9 @@ export function renderPredictionsPanel(vessels, predictions) {
         container.innerHTML = `
             <div class="chart-empty" style="min-height:300px">
                 <span class="chart-empty-icon">🤖</span>
-                <div>No active vessels to predict</div>
+                <div>No booked vessels to predict</div>
                 <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">
-                    Upload vessel data in the Optimizer to see AI predictions
+                    Book a vessel in Strategic Planning to see XGBoost predictions
                 </div>
             </div>
         `;
@@ -30,7 +30,7 @@ export function renderPredictionsPanel(vessels, predictions) {
         <div class="card-header">
             <div>
                 <h3 class="card-title">🤖 XGBoost Delay Predictions</h3>
-                <p class="card-subtitle">AI-powered logistics arrival forecasting (Confidence: ${formatPercent(averageConfidence)})</p>
+                <p class="card-subtitle">Booked vessel plan forecasting (Confidence: ${formatPercent(averageConfidence)})</p>
             </div>
         </div>
 
@@ -48,6 +48,9 @@ export function renderPredictionsPanel(vessels, predictions) {
                             <div>
                                 <h4 style="font-size:1rem;font-weight:700">${v.name}</h4>
                                 <div style="font-size:0.72rem;color:var(--text-muted)">ETA: ${new Date(v.scheduledETA).toLocaleDateString()} at ${v.destinationPortName}</div>
+                                <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">
+                                    Route: ${v.routeName || v.planRoute?.routeName || '—'} | Rakes: ${v.rakes || v.rake?.quantity || '—'}
+                                </div>
                             </div>
                             <div class="risk-badge" style="background:${isHighRisk ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; color:${riskColor}; padding:4px 8px; border-radius:4px; font-size:0.65rem; font-weight:700; text-transform:uppercase">
                                 ${isHighRisk ? 'High Risk' : 'On Track'}
@@ -83,7 +86,7 @@ export function renderPredictionsPanel(vessels, predictions) {
                                 ${pred.treeOutputs ? pred.treeOutputs.slice(0, 8).map(out => `
                                     <div style="height:12px;width:12px;border-radius:2px;background:${out > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};opacity:${Math.abs(out) / 10};" title="Tree output: ${out}h"></div>
                                 `).join('') : ''}
-                                <span style="font-size:0.6rem;color:var(--text-muted);margin-left:auto">XGBoost Ensemble Paths</span>
+                                <span style="font-size:0.6rem;color:var(--text-muted);margin-left:auto">XGBoost Ensemble Trees</span>
                             </div>
                         </div>
                     </div>

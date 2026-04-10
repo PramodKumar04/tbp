@@ -1,5 +1,5 @@
 // ============================================================
-// SteelSync-Opt — What-If Simulation Panel
+// SteelSync-Opt - What-If Simulation Panel
 // ============================================================
 
 import { SCENARIO_TYPES, runSimulation, getScenarioSummary } from '../engines/simulation.js';
@@ -14,13 +14,41 @@ let scenarioParams = {};
 const getPortName = (id) => PORTS.find(p => p.id === id)?.name || id || 'Unknown Port';
 const getPlantName = (id) => PLANTS.find(p => p.id === id)?.name || id || 'Unknown Plant';
 
+function getVesselPool(data) {
+    const planned = Array.isArray(data?.plannedVessels) ? data.plannedVessels : [];
+    const live = Array.isArray(data?.vessels) ? data.vessels : [];
+    const pool = planned.length > 0 ? planned : live;
+    const seen = new Set();
+
+    return pool.filter(item => {
+        const vessel = item.vessel || item;
+        const key = String(vessel.id || vessel.vesselId || item.id || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function getRakePool(data) {
+    const planned = Array.isArray(data?.plannedRakes) ? data.plannedRakes : [];
+    const live = Array.isArray(data?.rakes) ? data.rakes : [];
+    const pool = planned.length > 0 ? planned : live;
+    const seen = new Set();
+
+    return pool.filter(item => {
+        const key = String(item.id || item.rakeId || item.rakeNumber || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 /**
  * Render what-if simulation panel
  */
 export function renderWhatIfPanel(container, data, baselineResults) {
     if (!container) return;
-    
-    // Initial Render
+
     container.innerHTML = `
         <div class="card-header">
             <div>
@@ -56,13 +84,10 @@ export function renderWhatIfPanel(container, data, baselineResults) {
         </div>
     `;
 
-    // --- EVENT DELEGATION (SINGLE BINDING) ---
-    // Remove existing to prevent duplication if container persists
     if (container._whatIfBound) return;
     container._whatIfBound = true;
 
     container.addEventListener('click', async (ev) => {
-        // Scenario Selection
         const card = ev.target.closest('.scenario-card');
         if (card) {
             activeScenario = card.dataset.scenario;
@@ -71,21 +96,18 @@ export function renderWhatIfPanel(container, data, baselineResults) {
             return;
         }
 
-        // Run Simulation
         const btn = ev.target.closest('#runSimulationBtn');
         if (btn) {
             try {
                 btn.disabled = true;
                 btn.innerHTML = '<span class="loading-spinner"></span> Running...';
-                
+
                 const result = executeSimulation(activeScenario, data, baselineResults);
                 const out = container.querySelector('#simulationOutput');
                 if (out) renderSimulationResults(out, result);
 
-                // System of Record Flow: Save to DB
                 await persistSimulationResult(activeScenario, scenarioParams, result);
 
-                // Dispatch completion events
                 window.dispatchEvent(new CustomEvent('simulationSaved', { detail: { result } }));
                 window.dispatchEvent(new CustomEvent('simulationCompleted', {
                     detail: {
@@ -104,12 +126,82 @@ export function renderWhatIfPanel(container, data, baselineResults) {
         }
     });
 
-    container.addEventListener('input', (ev) => {
+    container.addEventListener('input', async (ev) => {
         const input = ev.target.closest('[data-param]');
-        if (input) {
-            scenarioParams[input.dataset.param] = input.type === 'range' ? parseFloat(input.value) : input.value;
-            const display = container.querySelector(`#paramDisplay_${input.dataset.param}`);
-            if (display) display.textContent = input.value;
+        if (!input) return;
+
+        const paramKey = input.dataset.param;
+        scenarioParams[paramKey] = input.type === 'range' ? parseFloat(input.value) : input.value;
+
+        const display = container.querySelector(`#paramDisplay_${paramKey}`);
+        if (display) display.textContent = input.value;
+
+        if (paramKey === 'vesselId') {
+            const statusArea = container.querySelector('#simulationOutput');
+            if (statusArea) statusArea.innerHTML = '<div class="alert alert-info" style="font-size:0.75rem">Fetching live plan context for the selected vessel...</div>';
+
+            try {
+                const res = await apiFetch('/api/vessels/plans/lookup', {
+                    method: 'POST',
+                    body: JSON.stringify({ vesselId: input.value })
+                });
+                if (res.ok) {
+                    const vesselDetails = await res.json();
+                    scenarioParams._vesselDetails = vesselDetails;
+                    if (statusArea) {
+                        statusArea.innerHTML = `
+                            <div class="alert alert-info animate-fade-in" style="font-size:0.75rem">
+                                <strong>${vesselDetails.vessel?.name || vesselDetails.name || input.value}</strong>:
+                                Currently sailing from <strong>${vesselDetails.source || vesselDetails.origin || 'Unknown'}</strong>
+                                to <strong>${vesselDetails.destination || vesselDetails.destinationPortName || 'Unknown'}</strong>.
+                                <br/><span style="opacity:0.8">Delay impact will use the saved vessel-plan snapshot.</span>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (err) {
+                console.warn('[What-If] Failed to fetch vessel details', err);
+            }
+        }
+
+        if (paramKey === 'rakeId') {
+            const statusArea = container.querySelector('#simulationOutput');
+            if (statusArea) statusArea.innerHTML = '<div class="alert alert-info" style="font-size:0.75rem">🔍 Fetching real-time status for the selected rake...</div>';
+
+            try {
+                const res = await apiFetch('/api/vessels/plans/lookup', {
+                    method: 'POST',
+                    body: JSON.stringify({ rakeId: input.value })
+                });
+                if (res.ok) {
+                    const rakeDetails = await res.json();
+                    scenarioParams._rakeDetails = rakeDetails;
+                    if (statusArea) {
+                        statusArea.innerHTML = `
+                            <div class="alert alert-info animate-fade-in" style="font-size:0.75rem">
+                                <strong>${rakeDetails.rake?.rakeNumber || rakeDetails.rake?.routeId || input.value}</strong>:
+                                Currently moving from <strong>${rakeDetails.source || rakeDetails.rake?.fromPortName || 'Unknown'}</strong>
+                                to <strong>${rakeDetails.destination || rakeDetails.rake?.toPlantName || 'Unknown'}</strong>.
+                                <br/><span style="opacity:0.8">Disruption prediction will use this saved vessel-plan context.</span>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (err) {
+                console.warn('[What-If] Failed to fetch rake details', err);
+                try {
+                    const fallback = await apiFetch('/api/data/whatif/rail-cancel', {
+                        method: 'POST',
+                        body: JSON.stringify({ rakeId: input.value })
+                    });
+                    if (fallback?.ok) {
+                        const rakeDetails = await fallback.json();
+                        scenarioParams._rakeDetails = rakeDetails;
+                    }
+                } catch (fallbackErr) {
+                    console.warn('[What-If] Fallback rake lookup also failed', fallbackErr);
+                }
+            }
         }
     });
 }
@@ -136,27 +228,37 @@ function renderScenarioConfig(scenarioId, data) {
     const scenario = SCENARIO_TYPES.find(s => s.id === scenarioId);
     if (!scenario) return '';
 
+    const vesselPool = getVesselPool(data);
+    const rakePool = getRakePool(data);
     let paramsHtml = '';
+
     for (const param of scenario.params) {
         if (param.type === 'vessel-select') {
             paramsHtml += `
                 <div class="form-group">
                     <label class="form-label">${param.label}</label>
                     <select class="form-select" data-param="${param.key}">
-                        ${data.vessels.map(v => {
-                            const matName = v.materialName || v.material || 'Vessel';
-                            return `<option value="${v.id}">${v.name} (${matName})</option>`;
+                        ${vesselPool.map(v => {
+                            const vessel = v.vessel || v;
+                            const matName = vessel.materialName || vessel.material || 'Vessel';
+                            const label = `${vessel.name || vessel.vesselName || vessel.id || 'Vessel'} (${matName})`;
+                            const value = vessel.id || vessel.vesselId || v.id;
+                            return `<option value="${value}" ${scenarioParams[param.key] === value ? 'selected' : ''}>${label}</option>`;
                         }).join('')}
                     </select>
                 </div>
             `;
-            if (!scenarioParams[param.key]) scenarioParams[param.key] = data.vessels[0]?.id;
+            if (!scenarioParams[param.key] && vesselPool.length) {
+                const vessel = vesselPool[0].vessel || vesselPool[0];
+                scenarioParams[param.key] = vessel.id || vessel.vesselId || vesselPool[0].id;
+            }
         } else if (param.type === 'rake-select') {
-            const rakeOptions = (data.rakes || []).map(r => {
-                const fromName = getPortName(r.fromPort || r.from);
-                const toName = getPlantName(r.toPlant || r.to);
-                const label = `${r.rakeNumber || r.id || 'RK'} (${fromName} → ${toName})`;
-                return `<option value="${r.id}" ${scenarioParams[param.key] === r.id ? 'selected' : ''}>${label}</option>`;
+            const rakeOptions = rakePool.map(r => {
+                const fromName = getPortName(r.fromPort || r.from || r.route?.fromPort || r.route?.from);
+                const toName = getPlantName(r.toPlant || r.to || r.route?.toPlant || r.route?.to);
+                const label = `${r.rakeNumber || r.routeId || r.id || 'RK'} (${fromName} -> ${toName})`;
+                const value = r.id || r.rakeId || r.rakeNumber;
+                return `<option value="${value}" ${scenarioParams[param.key] === value ? 'selected' : ''}>${label}</option>`;
             }).join('');
 
             paramsHtml += `
@@ -167,7 +269,9 @@ function renderScenarioConfig(scenarioId, data) {
                     </select>
                 </div>
             `;
-            if (!scenarioParams[param.key] && data.rakes?.length) scenarioParams[param.key] = data.rakes[0].id;
+            if (!scenarioParams[param.key] && rakePool.length) {
+                scenarioParams[param.key] = rakePool[0].id || rakePool[0].rakeId || rakePool[0].rakeNumber;
+            }
         } else if (param.type === 'plant-select') {
             paramsHtml += `
                 <div class="form-group">
@@ -192,7 +296,7 @@ function renderScenarioConfig(scenarioId, data) {
             const defaultVal = param.default;
             const currentVal = scenarioParams[param.key] !== undefined ? scenarioParams[param.key] : defaultVal;
             scenarioParams[param.key] = currentVal;
-            
+
             paramsHtml += `
                 <div class="form-group">
                     <label class="form-label">${param.label}: <span id="paramDisplay_${param.key}" class="mono" style="color:var(--accent-primary)">${currentVal}</span></label>
@@ -239,49 +343,53 @@ function renderSimulationResults(container, comparison) {
     const { impact } = comparison;
     const summary = getScenarioSummary(comparison);
 
-    const isIncrease = impact.costChange > 0;
-    const changeColor = isIncrease ? 'var(--accent-danger)' : 'var(--accent-success)';
-    const changeIcon = isIncrease ? '📈' : '📉';
+    const isLoss = impact.costChange > 0;
+    const themeColor = isLoss ? 'var(--accent-danger)' : 'var(--accent-success)';
+    const headerLabel = isLoss ? 'Critical Disruption Analysis' : 'Optimization Impact Analysis';
+    const totalLabel = isLoss ? 'Potential Loss' : 'Potential Saving';
 
     container.innerHTML = `
         <div class="simulation-result-card animate-slide-up">
-            <h4 style="font-size:0.88rem;font-weight:600;margin-bottom:12px">Simulation Impact Analysis</h4>
-
-            <div class="simulation-summary-box" style="background:${isIncrease ? 'rgba(185, 28, 28, 0.06)' : 'rgba(21, 128, 61, 0.06)'}">
-                <p>${summary}</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h4 style="font-size:0.88rem;font-weight:600">${headerLabel}</h4>
+                <div class="ml-badge" style="background:${isLoss ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; color:${themeColor}; border:1px solid ${themeColor}44">
+                    ${isLoss ? '⚠️ Risk Alert' : '✨ Efficiency Gain'}
+                </div>
             </div>
 
-            <div class="impact-grid">
-                <div class="impact-card">
-                    <div class="impact-value" style="color:${changeColor}">
-                        ${isIncrease ? '+' : ''}${formatINR(impact.costChange, true)}
+            <div class="simulation-summary-box" style="background:${isLoss ? 'rgba(185, 28, 28, 0.06)' : 'rgba(21, 128, 61, 0.06)'}; border-left:4px solid ${themeColor}; padding:14px; border-radius:8px; margin-bottom:20px">
+                <p style="font-size:0.85rem;line-height:1.5;color:var(--text-secondary)">${summary}</p>
+            </div>
+
+            <div class="impact-grid" style="grid-template-columns:repeat(auto-fit, minmax(140px, 1fr))">
+                <div class="impact-card" style="border-top:2px solid ${themeColor}">
+                    <div class="impact-value" style="color:${themeColor}">
+                        ${isLoss ? '▲' : '▼'} ${formatINR(Math.abs(impact.costChange), true)}
                     </div>
-                    <div class="impact-label">Total Cost Impact</div>
+                    <div class="impact-label">${totalLabel}</div>
                 </div>
                 <div class="impact-card">
-                    <div class="impact-value" style="color:${changeColor}">
-                        ${isIncrease ? '+' : ''}${impact.costChangePercent.toFixed(1)}%
+                    <div class="impact-value" style="color:${themeColor}">
+                        ${isLoss ? '+' : ''}${impact.costChangePercent.toFixed(1)}%
                     </div>
-                    <div class="impact-label">Cost Change</div>
+                    <div class="impact-label">Budget Delta</div>
                 </div>
                 <div class="impact-card">
                     <div class="impact-value" style="color:${impact.demurrageChange > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'}">
                         ${impact.demurrageChange > 0 ? '+' : ''}${formatINR(impact.demurrageChange, true)}
                     </div>
-                    <div class="impact-label">Demurrage</div>
-                </div>
-                <div class="impact-card">
-                    <div class="impact-value" style="color:${impact.railChange > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'}">
-                        ${impact.railChange > 0 ? '+' : ''}${formatINR(impact.railChange, true)}
-                    </div>
-                    <div class="impact-label">Rail Impact</div>
+                    <div class="impact-label">Demurrage Variation</div>
                 </div>
                 <div class="impact-card">
                     <div class="impact-value" style="color:var(--accent-danger)">
-                        ${impact.penaltyChange > 0 ? '+' : ''}${formatINR(impact.penaltyChange, true)}
+                        ${formatINR(impact.penaltyChange, true)}
                     </div>
-                    <div class="impact-label">Penalties & Fees</div>
+                    <div class="impact-label">Unmet Demand Penalty</div>
                 </div>
+            </div>
+
+            <div style="margin-top:16px; font-size:0.75rem; color:var(--text-muted); text-align:center">
+                📊 Analysis based on current state fleet and active ML constraints
             </div>
         </div>
     `;

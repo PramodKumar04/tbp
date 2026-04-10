@@ -74,19 +74,24 @@ export function renderKPIs(container, summaryData) {
 /**
  * Render page header
  */
-export function renderPageHeader(container, title, subtitle) {
+export function renderPageHeader(container, title, subtitle, context = {}) {
     if (!container) return;
+    const initials = (context.userInitials || context.username || 'U').toString().trim().slice(0, 1).toUpperCase();
+    const label = context.username || context.userLabel || 'Account';
     container.innerHTML = `
         <div class="page-header-left">
             <h1 class="page-title">${title}</h1>
             <p class="page-subtitle">${subtitle}</p>
         </div>
         <div class="page-header-right">
-            <div class="profile-trigger" id="dashboardProfileTrigger" title="User Profile">
-                <span>👤</span>
+            <div class="header-meta-group">
+                <span class="live-indicator">Real-Time Data</span>
+                <span class="last-updated" id="lastUpdated"></span>
             </div>
-            <span class="live-indicator">Real-Time Data</span>
-            <span class="last-updated" id="lastUpdated"></span>
+            <button class="profile-trigger" id="dashboardProfileTrigger" title="User Profile" type="button">
+                <span class="profile-trigger-avatar">${initials}</span>
+                <span class="profile-trigger-label">${label}</span>
+            </button>
         </div>
     `;
     updateTimestamp();

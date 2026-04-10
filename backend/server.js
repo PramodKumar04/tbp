@@ -28,6 +28,7 @@ app.use('/api/ml', require('./routes/mlRoutes'));
 app.use('/api/simulation', require('./routes/simulationRoutes'));
 app.use('/api/vessels', require('./routes/vesselRoutes'));
 app.use('/api/budget', require('./routes/budgetRoutes'));
+app.use('/api/inventory', require('./routes/inventoryRoutes'));
 
 // 📁 Serve static files from the project root
 app.use(express.static(path.resolve(__dirname, '..')));

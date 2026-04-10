@@ -27,7 +27,7 @@ import { renderPredictionsPanel } from './ui/ml-predictions.js';
 import { renderUserProfile, toggleProfile } from './ui/user-profile.js';
 
 // ── Application State ────────────────────────────────────
-let appData = { vessels: [], rakes: [], inventory: {} };
+let appData = { vessels: [], rakes: [], routes: [], nodes: [], inventory: {} };
 let dashboardSummary = { 
     totalCost: 0, optimizedCost: 0, 
     costBreakdown: { freight: 0, portHandling: 0, railTransport: 0, demurrage: 0, storage: 0 },
@@ -36,6 +36,95 @@ let dashboardSummary = {
 let currentPanel = 'overview';
 let activePredictions = [];
 let bookedVessels = []; // Vessels explicitly planned & saved via Vessel Planning wizard
+let latestOptimizationSnapshot = { routeHistory: [], routeAlternatives: [], activeRoutes: [] };
+let uploadedOptimizationData = {
+    vessels: [],
+    rakes: [],
+    routes: [],
+    nodes: [],
+    inventory: {},
+};
+
+function mergeUploadedOptimizationData(base, incoming) {
+    const next = {
+        vessels: Array.isArray(base?.vessels) ? [...base.vessels] : [],
+        rakes: Array.isArray(base?.rakes) ? [...base.rakes] : [],
+        routes: Array.isArray(base?.routes) ? [...base.routes] : [],
+        nodes: Array.isArray(base?.nodes) ? [...base.nodes] : [],
+        inventory: base?.inventory ? JSON.parse(JSON.stringify(base.inventory)) : {},
+    };
+
+    if (!incoming) return next;
+
+    const type = incoming.type === 'rakes' ? 'demand_rakes' : incoming.type;
+    if ((type === 'vessels' || type === 'demand_vessels') && Array.isArray(incoming.data)) {
+        next.vessels = incoming.data;
+    } else if (type === 'demand_rakes' && Array.isArray(incoming.data)) {
+        next.rakes = incoming.data;
+    } else if (type === 'routes' && Array.isArray(incoming.data)) {
+        next.routes = incoming.data;
+    } else if (type === 'nodes' && Array.isArray(incoming.data)) {
+        next.nodes = incoming.data;
+    } else if (type === 'inventory' && incoming.data) {
+        next.inventory = incoming.data;
+    } else if (incoming.vessels || incoming.rakes || incoming.inventory) {
+        if (Array.isArray(incoming.vessels)) next.vessels = incoming.vessels;
+        if (Array.isArray(incoming.rakes)) next.rakes = incoming.rakes;
+        if (Array.isArray(incoming.routes)) next.routes = incoming.routes;
+        if (Array.isArray(incoming.nodes)) next.nodes = incoming.nodes;
+        if (incoming.inventory) next.inventory = incoming.inventory;
+    }
+
+    return next;
+}
+
+async function readJsonResult(settledResult) {
+    if (!settledResult || settledResult.status !== 'fulfilled') return { data: [] };
+    const response = settledResult.value;
+    if (!response || typeof response.json !== 'function') return { data: [] };
+    try {
+        return await response.json();
+    } catch {
+        return { data: [] };
+    }
+}
+
+function normalizeBookedVessel(plan, liveVessel = null) {
+    const vessel = plan?.vessel || {};
+    const route = plan?.planRoute || plan?.route || {};
+    const rake = plan?.rake || {};
+    const source = liveVessel || vessel || {};
+    const vesselId = plan?.id || plan?.vesselId || vessel.id || source.id || '';
+    const name = plan?.name || plan?.vesselName || vessel.name || source.name || `Vessel ${String(vesselId || 'Unknown').slice(0, 8)}`;
+
+    return {
+        id: vesselId,
+        vesselId,
+        name,
+        origin: plan?.origin || vessel.origin || source.origin || 'International',
+        originCountry: plan?.originCountry || vessel.originCountry || source.originCountry || '',
+        destinationPort: plan?.destinationPort || vessel.destinationPort || source.destinationPort || '',
+        destinationPortName: plan?.destinationPortName || vessel.destinationPortName || source.destinationPortName || '',
+        material: plan?.material || vessel.material || source.material || '',
+        materialName: plan?.materialName || vessel.materialName || source.materialName || '',
+        quantity: Number(plan?.quantity || vessel.quantity || source.quantity || 0),
+        vesselAge: Number(plan?.vesselAge || vessel.vesselAge || source.vesselAge || 0),
+        scheduledETA: plan?.scheduledETA || vessel.scheduledETA || source.scheduledETA || null,
+        actualETA: plan?.actualETA || vessel.actualETA || source.actualETA || null,
+        delayHours: Number(plan?.delayHours || vessel.delayHours || source.delayHours || 0),
+        status: 'berthed',
+        berthAssigned: Number(plan?.berthAssigned || vessel.berthAssigned || source.berthAssigned || 1),
+        freightCost: Number(plan?.freightCost || vessel.freightCost || source.freightCost || 0),
+        rakes: Number(plan?.rakes || rake.rakes || rake.quantity || 0),
+        planned: true,
+        planRoute: route,
+        planCost: Number(plan?.planCost || plan?.cost || route.cost || 0),
+        routeName: plan?.routeName || route?.routeName || '',
+        planTimestamp: plan?.planTimestamp || plan?.timestamp || plan?.createdAt || null,
+        vessel: vessel,
+        rake,
+    };
+}
 
 /**
  * Initialize Application
@@ -98,25 +187,55 @@ export async function initApp() {
         // Optimistic update: immediately add the just-booked vessel to the tracker
         const plan = e.detail;
         if (plan && plan.vessel) {
-            const optimisticVessel = {
-                ...plan.vessel,
-                planned: true,
-                status: 'berthed',
-                berthAssigned: plan.vessel.berthAssigned || 1,
-                planRoute: plan.route,
-            };
+            const optimisticVessel = normalizeBookedVessel(plan);
             // Avoid duplicates
-            if (!bookedVessels.find(v => v.id === optimisticVessel.id)) {
-                bookedVessels = [optimisticVessel, ...bookedVessels];
-            }
+            bookedVessels = [
+                optimisticVessel,
+                ...bookedVessels.filter(v => String(v.id) !== String(optimisticVessel.id))
+            ];
         }
 
-        // Then sync from DB (authoritative)
-        await loadBookedVessels();
+        // Refresh summary so dashboard counters and tracker stay in sync.
+        refreshDashboardSummary().catch(() => {});
 
-        // Re-render tracker if visible
+        // Then sync from DB (authoritative)
+        try {
+            await loadBookedVessels();
+        } catch (syncErr) {
+            console.warn('[App] Booked vessel resync failed, keeping optimistic tracker state', syncErr);
+        }
+
+        // Re-render tracker if visible, otherwise keep the updated state for next navigation
         if (currentPanel === 'vessels') {
             switchPanel('vessels');
+        } else if (currentPanel === 'inventory') {
+            switchPanel('inventory');
+        } else if (document.getElementById('vesselTrackerContent')) {
+            const container = document.getElementById('vesselTrackerContent');
+            const bookedIds = new Set(bookedVessels.map(v => v.id));
+            const unbookedVessels = appData.vessels.filter(v => !bookedIds.has(v.id));
+            const taggedBooked = bookedVessels.map(v => ({ ...v, planned: true }));
+            const allVessels = [...taggedBooked, ...unbookedVessels];
+            const predictions = allVessels.map(v => {
+                if (predictor && predictor.trained) {
+                    try { return predictor.predictVesselDelay(v); } catch (e) {}
+                }
+                return { predictedDelay: v.delayHours || 0, confidence: 0.75, factors: [] };
+            });
+            renderVesselTracker(container, allVessels, predictions);
+        }
+    });
+
+    window.addEventListener('inventoryUpdated', async () => {
+        console.log('[App] Inventory updated, refreshing data...');
+        try {
+            await loadAppData();
+            await refreshDashboardSummary();
+            if (currentPanel === 'inventory') {
+                switchPanel('inventory');
+            }
+        } catch (err) {
+            console.warn('[App] Inventory refresh failed', err);
         }
     });
     
@@ -136,25 +255,47 @@ export async function initApp() {
 
 async function loadAppData() {
     try {
-        const [rakeRes, invRes, vesselRes] = await Promise.all([
+        const [rakeRes, invRes, vesselRes, routeRes, nodeRes, manualInvRes] = await Promise.allSettled([
             apiFetch('/api/data/demand_rakes'),
             apiFetch('/api/data/inventory'),
-            apiFetch('/api/data/vessels')
+            apiFetch('/api/data/vessels'),
+            apiFetch('/api/data/routes'),
+            apiFetch('/api/data/nodes'),
+            apiFetch('/api/inventory')
         ]);
 
-        const rakes = await rakeRes.json();
-        const inv = await invRes.json();
-        const vessels = await vesselRes.json();
+        const rakes = await readJsonResult(rakeRes);
+        const inv = await readJsonResult(invRes);
+        const vessels = await readJsonResult(vesselRes);
+        const routes = await readJsonResult(routeRes);
+        const nodes = await readJsonResult(nodeRes);
+        const manualInv = await readJsonResult(manualInvRes);
 
         if (!rakes.data?.length || !vessels.data?.length) {
             console.warn('[App] Backend data empty, initializing clean state');
-            appData = { vessels: [], rakes: [], inventory: {}, isEmpty: true };
-            // dashboardSummary will naturally stay at zero from its initial value
+            // Even if general data is empty, check if we have manual inventory
+            const structuredInv = mapInventory(inv.data[0]?.data || []);
+            const manualStructured = mapManualInventory(manualInv.data || []);
+            const finalInv = { ...structuredInv, ...manualStructured };
+            
+            appData = { 
+                vessels: [], 
+                rakes: [], 
+                routes: routes.data?.[0]?.data || [], 
+                nodes: nodes.data?.[0]?.data || [], 
+                inventory: finalInv, 
+                isEmpty: Object.keys(finalInv).length === 0 
+            };
         } else {
+            const structuredInv = mapInventory(inv.data[0]?.data || []);
+            const manualStructured = mapManualInventory(manualInv.data || []);
+            
             appData = {
                 rakes: rakes.data[0].data,
                 vessels: vessels.data[0].data,
-                inventory: mapInventory(inv.data[0]?.data || []),
+                routes: routes.data?.[0]?.data || [],
+                nodes: nodes.data?.[0]?.data || [],
+                inventory: mergeInventories(structuredInv, manualStructured),
                 isLive: true,
                 isEmpty: false
             };
@@ -168,7 +309,7 @@ async function loadAppData() {
         }
     } catch (err) {
         console.error('[App] Load failed', err);
-        appData = { vessels: [], rakes: [], inventory: {}, isEmpty: true };
+        appData = { vessels: [], rakes: [], routes: [], nodes: [], inventory: {}, isEmpty: true };
     }
 }
 
@@ -196,40 +337,20 @@ async function loadBookedVessels() {
             const result = await res.json();
             const plans = result.data || [];
 
-            // Cross-reference with live appData to fill missing fields for old records
+            // Normalize every plan into a tracker-ready vessel record.
             bookedVessels = plans.map(plan => {
-                // Detect old/incomplete record: name is missing, generic, or starts with 'Vessel '
-                const hasFullData = plan.name && 
-                    !plan.name.startsWith('Vessel ') && 
-                    plan.origin && plan.origin !== 'International';
-
-                if (hasFullData) return plan; // New record — all data is present
-
-                // Try to find the matching vessel in live data by ID
-                const liveVessel = appData.vessels && appData.vessels.find(v => v.id === plan.id);
-                if (liveVessel) {
-                    // Merge: live vessel provides identity/timing data, plan provides booking info
-                    return {
-                        ...liveVessel,
-                        planned: true,
-                        planRoute: plan.planRoute || plan.route || {},
-                        planCost: plan.planCost || plan.cost || 0,
-                        planTimestamp: plan.planTimestamp,
-                        // Override status to 'berthed' since it was booked
-                        status: 'berthed',
-                        berthAssigned: liveVessel.berthAssigned || plan.berthAssigned || 1,
-                    };
-                }
-
-                // Return the DB plan as-is even if partial (will show with fallbacks)
-                return { ...plan, planned: true };
+                const liveVessel = appData.vessels && appData.vessels.find(v =>
+                    String(v.id) === String(plan.id || plan.vesselId || plan.vessel?.id)
+                );
+                return normalizeBookedVessel(plan, liveVessel);
             });
 
             console.log(`[App] Loaded ${bookedVessels.length} booked vessels (${bookedVessels.filter(v => v.name && !v.name.startsWith('Vessel')).length} with full data)`);
+        } else {
+            console.warn('[App] Booked vessel endpoint returned no data, keeping current tracker state');
         }
     } catch (e) {
         console.warn('[App] Failed to load booked vessels:', e);
-        bookedVessels = [];
     }
 }
 
@@ -256,18 +377,28 @@ async function runInitialOptimization() {
     }
 
     console.log('[App] No baseline optimization found, running initial...');
-    const result = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory);
+    const result = optimizeLogistics(appData.vessels, appData.rakes, appData.inventory, {
+        routeCandidates: appData.routes || [],
+        nodes: appData.nodes || []
+    });
     
     try {
-        await apiFetch('/api/optimizations', {
-            method: 'POST',
-            body: JSON.stringify({
+            await apiFetch('/api/optimizations', {
+                method: 'POST',
+                body: JSON.stringify({
+                feasible: result.feasible,
                 totalCost: result.totalCost,
                 costBreakdown: result.costBreakdown,
                 vesselSchedule: result.vesselSchedule,
                 railPlan: result.railPlan,
+                routeHistory: result.routeHistory,
+                routeAlternatives: result.routeAlternatives,
                 savings: result.savings,
-                meta: { isInitialBaseline: true }
+                meta: { isInitialBaseline: true },
+                mlConstraints: result.mlConstraints,
+                sourceMeta: result.sourceMeta,
+                inputSnapshot: result.inputSnapshot,
+                optimizedAt: result.optimizedAt
             })
         });
     } catch (e) {
@@ -279,10 +410,16 @@ async function refreshDashboardSummary() {
     try {
         const res = await apiFetch('/api/dashboard/summary');
         dashboardSummary = await res.json();
+        latestOptimizationSnapshot = {
+            routeHistory: Array.isArray(dashboardSummary?.routeHistory) ? dashboardSummary.routeHistory : [],
+            routeAlternatives: Array.isArray(dashboardSummary?.routeAlternatives) ? dashboardSummary.routeAlternatives : [],
+            activeRoutes: Array.isArray(dashboardSummary?.activeRoutes) ? dashboardSummary.activeRoutes : [],
+        };
         
         // Update live predictions from ML model
-        if (appData?.vessels) {
-            activePredictions = appData.vessels.map(v => {
+        const predictionSource = bookedVessels.length > 0 ? bookedVessels : (appData?.vessels || []);
+        if (predictionSource.length) {
+            activePredictions = predictionSource.map(v => {
                 try { return predictor.predictVesselDelay(v); }
                 catch { return { predictedDelay: 0, confidence: 0, factors: [] }; }
             });
@@ -334,6 +471,7 @@ function calculateSupplyReliability(vessels, inventory, predictions) {
 
 function mapInventory(raw) {
     const structured = {};
+    if (!Array.isArray(raw)) return structured;
     raw.forEach(row => {
         const p = row.plant || 'bhilai';
         const m = row.material || 'coal';
@@ -346,6 +484,35 @@ function mapInventory(raw) {
         };
     });
     return structured;
+}
+
+function mapManualInventory(raw) {
+    const structured = {};
+    if (!Array.isArray(raw)) return structured;
+    raw.forEach(row => {
+        const p = row.plant;
+        const m = row.material;
+        if (!p || !m) return;
+        if (!structured[p]) structured[p] = {};
+        structured[p][m] = {
+            currentLevel: parseFloat(row.currentLevel || 0),
+            safetyStock: parseFloat(row.safetyStock || 0),
+            dailyConsumption: parseFloat(row.dailyConsumption || 0),
+            status: 'healthy'
+        };
+    });
+    return structured;
+}
+
+function mergeInventories(base, manual) {
+    const next = JSON.parse(JSON.stringify(base));
+    for (const plant in manual) {
+        if (!next[plant]) next[plant] = {};
+        for (const mat in manual[plant]) {
+            next[plant][mat] = manual[plant][mat];
+        }
+    }
+    return next;
 }
 
 function normalizeAppData() {
@@ -408,7 +575,7 @@ export function switchPanel(panelId, autoRun = false) {
             break;
         }
         case 'inventory': {
-            renderInventoryPanel(container, appData.inventory); 
+            renderInventoryPanel(container, appData.inventory, appData.inventoryProjection, bookedVessels); 
             break;
         }
         case 'costs': {
@@ -416,29 +583,62 @@ export function switchPanel(panelId, autoRun = false) {
             break;
         }
         case 'whatif': {
+            // Prefer booked/planned vessels first, then remaining live vessels
+            const bookedIds = new Set(bookedVessels.map(v => v.id));
+            const unbookedVessels = appData.vessels.filter(v => !bookedIds.has(v.id));
+            const taggedBooked = bookedVessels.map(v => ({ ...v, planned: true }));
+            const allVessels = [...taggedBooked, ...unbookedVessels];
+            const plannedRakes = bookedVessels
+                .map(bp => bp.rake || bp.planRoute || bp.route)
+                .filter(Boolean);
+
+            const rakesToUse = plannedRakes.length > 0
+                ? plannedRakes
+                : (dashboardSummary.activeRakes && dashboardSummary.activeRakes.length > 0)
+                    ? dashboardSummary.activeRakes.filter(r => r.used)
+                    : appData.rakes || [];
+
             const whatIfData = {
                 ...appData,
-                vessels: bookedVessels.length > 0 ? bookedVessels : (dashboardSummary.activeRoutes || appData.vessels),
-                rakes: dashboardSummary.activeRakes || appData.rakes
+                vessels: allVessels,
+                rakes: rakesToUse,
+                plannedVessels: bookedVessels,
+                plannedRakes,
             };
             renderWhatIfPanel(container, whatIfData, dashboardSummary); 
             break;
         }
         case 'predictions': {
-            renderPredictionsPanel(appData.vessels, activePredictions); 
+            const predictionSource = bookedVessels.length > 0 ? bookedVessels : appData.vessels;
+            const predictionResults = predictionSource.map(v => {
+                try { return predictor.predictVesselDelay(v); }
+                catch { return { predictedDelay: 0, confidence: 0, factors: [] }; }
+            });
+            renderPredictionsPanel(predictionSource, predictionResults); 
             break;
         }
         case 'datainput': {
-            renderDataInput(container, () => {
-                loadAppData().then(() => {
-                    refreshDashboardSummary();
-                    switchPanel('optimizer', true);
-                });
+            renderDataInput(container, (data) => {
+                uploadedOptimizationData = mergeUploadedOptimizationData(uploadedOptimizationData, data);
+                // Keep the uploaded dataset available for the optimizer instead of
+                // replacing it with stale live data or synthetic defaults.
+                switchPanel('optimizer', true);
             }); 
             break;
         }
         case 'vesselplan': {
-            renderVesselPlanning(container, appData.vessels); 
+            const optimizedRoutes = latestOptimizationSnapshot.routeHistory.length
+                ? latestOptimizationSnapshot.routeHistory
+                : latestOptimizationSnapshot.activeRoutes;
+            renderVesselPlanning(container, {
+                vessels: [],
+                routes: optimizedRoutes,
+                activeRoutes: optimizedRoutes,
+                optimizedRoutes,
+                routeHistory: latestOptimizationSnapshot.routeHistory,
+                routeAlternatives: latestOptimizationSnapshot.routeAlternatives,
+                inventory: appData.inventory,
+            }); 
             break;
         }
         case 'mlstudio': {
@@ -446,7 +646,7 @@ export function switchPanel(panelId, autoRun = false) {
             break;
         }
         case 'optimizer': {
-            renderOptimizerPanel(autoRun); 
+            renderOptimizerPanel(autoRun, uploadedOptimizationData); 
             break;
         }
     }
@@ -457,18 +657,23 @@ function renderOverviewPanel() {
     const kpis = document.getElementById('kpiGrid');
     if (!header || !kpis) return;
 
-    renderPageHeader(header, 'Supply Chain Control Tower', 'AI-driven real-time optimization & risk management');
+    const user = auth.getUser?.() || {};
+    renderPageHeader(header, 'Supply Chain Control Tower', 'AI-driven real-time optimization & risk management', {
+        username: user.username || user.name || user.email || 'Account',
+        userInitials: user.username || user.name || user.email || 'A',
+    });
     
-    // Add Active ML Constraints indicator
+    // Add Active ML Constraints indicator — values are DYNAMIC from the trained model
     const mlConstraints = predictor.getConstraints();
     if (mlConstraints) {
         const constraintsHeader = document.createElement('div');
         constraintsHeader.className = 'ml-constraints-banner animate-fade-in';
         constraintsHeader.innerHTML = `
             <span class="ml-badge">🤖 AI Constraints Active</span>
-            <span class="ml-rule">Monsoon Penalty: 1.45x</span>
-            <span class="ml-rule">Weather Risk: 1.3x</span>
-            <span class="ml-rule">Min Confidence: 85%</span>
+            <span class="ml-rule">Monsoon Penalty: ${mlConstraints.monsoonPenalty}x</span>
+            <span class="ml-rule">Weather Risk: ${mlConstraints.weatherRiskFactor}x</span>
+            <span class="ml-rule">Avg Delay: ${mlConstraints.meanTrainedDelay}h ± ${mlConstraints.stdTrainedDelay}h</span>
+            <span class="ml-rule">Confidence: ${Math.round(mlConstraints.confidenceLevel * 100)}%</span>
         `;
         header.appendChild(constraintsHeader);
     }

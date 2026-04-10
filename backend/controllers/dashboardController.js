@@ -20,13 +20,15 @@ async function getSummary(req, res, next) {
         ]);
 
         // 2. Get Latest Optimization for current state
-        const latestOptim = await OptimizationResult.findOne({ userId }).sort({ timestamp: -1 });
+        const latestOptim = await OptimizationResult.findOne({ userId }).sort({ optimizedAt: -1, timestamp: -1, _id: -1 });
 
         // 3. Compute Real-Time Metrics from current plan
         let delayedVesselsCount = 0;
         let rakeUtilization = 0;
         let activeVessels = [];
         let activeRakes = [];
+        let routeHistory = [];
+        let routeAlternatives = [];
         let costBreakdown = { freight: 0, portHandling: 0, railTransport: 0, demurrage: 0, storage: 0 };
         let currentSavings = { totalSaved: 0, percentSaved: 0, demurrageSaved: 0, demurragePercentSaved: 0, supplyReliability: 85 };
 
@@ -41,6 +43,8 @@ async function getSummary(req, res, next) {
             
             activeVessels = vessels; // Keep all from the plan
             activeRakes = rakes;
+            routeHistory = latestOptim.routeHistory || [];
+            routeAlternatives = latestOptim.routeAlternatives || [];
             costBreakdown = latestOptim.costBreakdown || costBreakdown;
             currentSavings = latestOptim.savings || currentSavings;
         }
@@ -58,8 +62,10 @@ async function getSummary(req, res, next) {
             rakeUtilization: Math.round(rakeUtilization),
             activeRoutes: activeVessels,
             activeRakes: activeRakes,
+            routeHistory,
+            routeAlternatives,
             planCount: stats.count,
-            lastOptimized: latestOptim ? latestOptim.timestamp : null
+            lastOptimized: latestOptim ? (latestOptim.optimizedAt || latestOptim.timestamp) : null
         });
     } catch (err) {
         next(err);

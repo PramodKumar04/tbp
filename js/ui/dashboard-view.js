@@ -26,7 +26,7 @@ export function renderDashboardView(container) {
                         </div>
                         <div class="nav-item" data-panel="vessels">
                             <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/></svg></span>
-                            <span class="nav-label">Vessel Monitor</span>
+                            <span class="nav-label">Strategic Tracker</span>
                             <span class="nav-badge" id="delayedBadge"></span>
                         </div>
                         <div class="nav-item" data-panel="vesselplan">
@@ -117,7 +117,7 @@ export function renderDashboardView(container) {
                 </section>
 
                 <section class="panel" id="panel-predictions">
-                    <div class="page-header"><div class="page-header-left"><h1 class="page-title">ML Predictions</h1><p class="page-subtitle">Random Forest delay prediction model analysis</p></div></div>
+                    <div class="page-header"><div class="page-header-left"><h1 class="page-title">ML Predictions</h1><p class="page-subtitle">XGBoost delay prediction model analysis for booked vessel plans</p></div></div>
                     <div id="predictionsContent"></div>
                 </section>
 

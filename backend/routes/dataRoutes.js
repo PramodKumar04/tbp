@@ -28,7 +28,11 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
     console.log("🔥 Upload route hit");
 
     try {
-        const { type } = req.body;
+        const typeAliases = {
+            rakes: 'demand_rakes',
+        };
+        const rawType = req.body.type;
+        const type = typeAliases[rawType] || rawType;
 
         if (!type) {
             return cleanupAndRespond(res, req.file, 400, 'Type is required');
@@ -134,6 +138,61 @@ router.get('/:type', auth, async (req, res) => {
 
     } catch (error) {
         console.error("❌ Fetch error:", error.message);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+
+// 💾 Save Single Inventory Record
+router.post('/inventory/record', auth, async (req, res) => {
+    try {
+        const { plant, material, currentLevel, safetyStock, dailyConsumption } = req.body;
+        
+        if (!plant || !material) {
+            return res.status(400).json({ error: 'Plant and Material are required' });
+        }
+
+        // Find existing inventory doc
+        let doc = await OptimizationData.findOne({ userId: req.userId, type: 'inventory' });
+        
+        const newRecord = {
+            plant,
+            material,
+            currentLevel: parseFloat(currentLevel || 0),
+            safetyStock: parseFloat(safetyStock || 0),
+            dailyConsumption: parseFloat(dailyConsumption || 0)
+        };
+
+        if (doc) {
+            // Update existing or append
+            let data = doc.data || [];
+            const idx = data.findIndex(r => r.plant === plant && r.material === material);
+            if (idx >= 0) {
+                data[idx] = newRecord;
+            } else {
+                data.push(newRecord);
+            }
+            doc.data = data;
+            doc.uploadedAt = new Date();
+            await doc.save();
+        } else {
+            // Create new
+            doc = new OptimizationData({
+                userId: req.userId,
+                type: 'inventory',
+                data: [newRecord],
+                fileName: 'manual_entry'
+            });
+            await doc.save();
+        }
+
+        return res.status(200).json({
+            message: '✅ Inventory record saved successfully',
+            data: newRecord
+        });
+
+    } catch (error) {
+        console.error("❌ Inventory save error:", error.message);
         return res.status(500).json({ error: error.message });
     }
 });

@@ -175,18 +175,31 @@ async function handleFileUpload(file, container, onDataApply) {
         if (statusText) statusText.textContent = 'Parsing data...';
 
         const parsed = await parseUploadedFile(file);
+        const backendTypeMap = {
+            rakes: 'demand_rakes',
+        };
+        const backendType = backendTypeMap[parsed.type] || parsed.type;
 
         // Upload to backend
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('type', parsed.type);
-        await apiUpload('/api/data/upload', formData);
+        formData.append('type', backendType);
+
+        const uploadRes = await apiUpload('/api/data/upload', formData);
+        if (!uploadRes || !uploadRes.ok) {
+            let errorMessage = 'Upload rejected by server';
+            try {
+                const err = await uploadRes?.json();
+                errorMessage = err?.error || errorMessage;
+            } catch {}
+            throw new Error(errorMessage);
+        }
 
         await new Promise(r => setTimeout(r, 300));
         if (progressBar) progressBar.style.width = '100%';
-        if (statusText) statusText.textContent = `✓ Successfully parsed ${Array.isArray(parsed.data) ? parsed.data.length : Object.keys(parsed.data).length} records (${parsed.type})`;
+        if (statusText) statusText.textContent = `✓ Successfully parsed ${Array.isArray(parsed.data) ? parsed.data.length : Object.keys(parsed.data).length} records (${backendType})`;
 
-        uploadedData = parsed;
+        uploadedData = { ...parsed, type: backendType, sourceType: parsed.type };
 
         // Show preview
         await new Promise(r => setTimeout(r, 500));

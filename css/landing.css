@@ -108,8 +108,9 @@ body.landing-page {
 
 .hero-content p {
     font-size: 1.25rem;
-    color: var(--text-dim);
+    color: black;
     margin-bottom: 2.5rem;
+    background: linear-gradient(to right, #000, #475569)
     max-width: 600px;
     line-height: 1.6;
 }

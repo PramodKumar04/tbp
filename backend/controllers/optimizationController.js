@@ -2,23 +2,41 @@ const OptimizationResult = require('../models/OptimizationResult');
 
 async function saveOptimization(req, res, next) {
     try {
-        const { totalCost, costBreakdown, vesselSchedule, railPlan, savings, meta } = req.body;
+        const {
+            feasible,
+            totalCost,
+            costBreakdown,
+            vesselSchedule,
+            railPlan,
+            routeHistory,
+            routeAlternatives,
+            savings,
+            meta,
+            mlConstraints,
+            sourceMeta,
+            inputSnapshot,
+            optimizedAt,
+        } = req.body;
         
         if (typeof totalCost !== 'number') {
             return res.status(400).json({ error: 'totalCost is required' });
         }
 
-        // 🗑️ Overwrite previous results (Reliability: Maintain only the latest optimized state)
-        await OptimizationResult.deleteMany({ userId: req.userId });
-
         const doc = new OptimizationResult({
             userId: req.userId,
+            feasible,
             totalCost,
             costBreakdown,
             vesselSchedule,
             railPlan,
+            routeHistory,
+            routeAlternatives,
             savings,
-            meta
+            meta,
+            mlConstraints,
+            sourceMeta,
+            inputSnapshot,
+            optimizedAt
         });
 
         await doc.save();
@@ -35,7 +53,7 @@ async function saveOptimization(req, res, next) {
 
 async function listOptimizations(req, res, next) {
     try {
-        const items = await OptimizationResult.find({ userId: req.userId }).sort({ timestamp: -1 }).limit(50);
+        const items = await OptimizationResult.find({ userId: req.userId }).sort({ optimizedAt: -1, timestamp: -1, _id: -1 }).limit(50);
         res.json({ count: items.length, data: items });
     } catch (err) {
         next(err);

@@ -23,6 +23,8 @@ const VesselPlanSchema = new mongoose.Schema({
     portId:  { type: String, default: '' },
     plantId: { type: String, default: '' },
     route:   { type: Object, default: {} },
+    vessel:  { type: Object, default: {} },
+    rake:    { type: Object, default: {} },
     rakes:   { type: Number, default: 2 },
     cost:    { type: Number, required: true },
     cargo:   { type: Object, default: {} },

@@ -8,10 +8,26 @@ import { predictor } from '../engines/prediction.js';
 
 let optVessels = null;
 let optRakes = null;
+let optRoutes = null;
+let optNodes = null;
 let optInventory = null;
 let solverResult = null;
+let optSourceData = null;
 
-export function renderOptimizerPanel(autoRun = false) {
+async function readJsonResult(settledResult) {
+    if (!settledResult || settledResult.status !== 'fulfilled') return { data: [] };
+    const response = settledResult.value;
+    if (!response || typeof response.json !== 'function') return { data: [] };
+    try {
+        return await response.json();
+    } catch {
+        return { data: [] };
+    }
+}
+
+export function renderOptimizerPanel(autoRun = false, sourceData = null) {
+    optSourceData = sourceData;
+
     const container = document.getElementById('optimizerStudioContent');
     if (!container) return;
 
@@ -136,12 +152,22 @@ export function renderOptimizerPanel(autoRun = false) {
 
                         <button class="btn btn-primary" id="btnApplySolve" style="width:100%">✅ Apply Plan to Dashboard</button>
                     </div>
+
+                    <div class="card" style="background:var(--bg-tertiary);margin-top:16px;overflow:hidden">
+                        <div style="padding:14px 16px;border-bottom:1px solid var(--border-primary)">
+                            <h4 style="font-size:0.88rem;font-weight:600">Optimization History</h4>
+                        </div>
+                        <div id="optimizationHistory" style="max-height:220px;overflow:auto;padding:12px 16px"></div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
 
     bindOptStudioEvents();
+
+    hydrateOptimizationInputs(sourceData);
+    loadOptimizationHistory();
 
     if (autoRun) {
         // Skip straight to Step 4 and trigger optimization
@@ -166,22 +192,28 @@ function bindOptStudioEvents() {
     // --- Skip / Live Data fallbacks ---
     document.getElementById('btnUseLiveData')?.addEventListener('click', async () => {
         try {
-            const [rRes, vRes, invRes] = await Promise.all([
+            const [rRes, vRes, invRes, routeRes, nodeRes] = await Promise.allSettled([
                 apiFetch('/api/data/demand_rakes'),
                 apiFetch('/api/data/vessels'),
-                apiFetch('/api/data/inventory')
+                apiFetch('/api/data/inventory'),
+                apiFetch('/api/data/routes'),
+                apiFetch('/api/data/nodes')
             ]);
-            const rakes = await rRes.json();
-            const vessels = await vRes.json();
-            const inv = await invRes.json();
-            
+            const rakes = await readJsonResult(rRes);
+            const vessels = await readJsonResult(vRes);
+            const inv = await readJsonResult(invRes);
+            const routes = await readJsonResult(routeRes);
+            const nodes = await readJsonResult(nodeRes);
+
             optRakes = rakes.data?.[0]?.data || [];
             optVessels = vessels.data?.[0]?.data || [];
             optInventory = inv.data?.[0]?.data || {};
+            optRoutes = routes?.data?.[0]?.data || [];
+            optNodes = nodes?.data?.[0]?.data || [];
             showNotification('Live app data loaded for optimization', 'success');
         } catch (e) {
             showNotification('Using synthetic fallback data', 'info');
-            optVessels = null; optRakes = null; optInventory = null;
+            optVessels = null; optRakes = null; optRoutes = null; optNodes = null; optInventory = null;
         }
         goToOptStep(2);
     });
@@ -321,26 +353,38 @@ async function runOptimization() {
     // Import generateAllData for fallback
     const { generateAllData } = await import('../data/synthetic-data.js');
 
+    // Prefer uploaded data from the Data Input panel, then live backend data, then synthetic fallback.
+    hydrateOptimizationInputs(optSourceData);
+
     // Fetch real data if not already loaded
-    if (!optVessels || !optRakes) {
+    if (!optVessels || !optRakes || !optInventory || !optRoutes || !optNodes) {
         try {
-            const [rRes, vRes] = await Promise.all([
+            const [rRes, vRes, routeRes, nodeRes, invRes] = await Promise.all([
                 apiFetch('/api/data/demand_rakes'),
-                apiFetch('/api/data/vessels')
+                apiFetch('/api/data/vessels'),
+                apiFetch('/api/data/routes'),
+                apiFetch('/api/data/nodes'),
+                apiFetch('/api/data/inventory')
             ]);
-            const rakes = await rRes.json();
-            const vessels = await vRes.json();
-            optVessels = vessels.data?.[0]?.data;
-            optRakes = rakes.data?.[0]?.data;
+            const rakes = await readJsonResult(rRes);
+            const vessels = await readJsonResult(vRes);
+            const routes = await readJsonResult(routeRes);
+            const nodes = await readJsonResult(nodeRes);
+            const inv = await readJsonResult(invRes);
+            if (!optRakes?.length) optRakes = rakes.data?.[0]?.data;
+            if (!optVessels?.length) optVessels = vessels.data?.[0]?.data;
+            if (!optRoutes?.length) optRoutes = routes.data?.[0]?.data;
+            if (!optNodes?.length) optNodes = nodes.data?.[0]?.data;
+            if (!optInventory || Object.keys(optInventory).length === 0) optInventory = inv.data?.[0]?.data || optInventory;
         } catch (e) {}
     }
 
-    // Fallback to synthetic if empty
+    // Fallback to synthetic only for the missing slices, never overwrite uploaded data wholesale.
     if (!optVessels?.length || !optRakes?.length) {
         const synth = generateAllData();
-        optVessels = synth.vessels;
-        optRakes = synth.rakes;
-        optInventory = synth.inventory;
+        if (!optVessels?.length) optVessels = synth.vessels;
+        if (!optRakes?.length) optRakes = synth.rakes;
+        if (!optInventory || Object.keys(optInventory).length === 0) optInventory = synth.inventory;
     }
 
     if (!optInventory || Object.keys(optInventory).length === 0) {
@@ -359,12 +403,17 @@ async function runOptimization() {
         departure: new Date(r.departure || Date.now()),
         arrival: new Date(r.arrival || Date.now())
     }));
+    const routes = Array.isArray(optRoutes) ? optRoutes : [];
+    const nodes = Array.isArray(optNodes) ? optNodes : [];
 
-    // Run MILP Optimizer
-    const dynamicConstraints = enableML ? {
-        delayPenaltyMultiplier: 1.2,
-        portCapacityFactor: 0.9
-    } : {};
+    // Run enterprise optimizer
+    const dynamicConstraints = {
+        demurrageRate,
+        routeCandidates: routes,
+        nodes,
+        delayPenaltyMultiplier: enableML ? 1.2 : 1,
+        portCapacityFactor: enableML ? 0.9 : 1
+    };
 
     solverResult = optimizeLogistics(vessels, rakes, optInventory, dynamicConstraints);
 
@@ -374,7 +423,27 @@ async function runOptimization() {
     setTimeout(() => displayResults(solverResult), 300);
 }
 
-function displayResults(result) {
+function hydrateOptimizationInputs(sourceData) {
+    if (!sourceData) return;
+
+    if (Array.isArray(sourceData.vessels) && sourceData.vessels.length) {
+        optVessels = sourceData.vessels;
+    }
+    if (Array.isArray(sourceData.rakes) && sourceData.rakes.length) {
+        optRakes = sourceData.rakes;
+    }
+    if (Array.isArray(sourceData.routes) && sourceData.routes.length) {
+        optRoutes = sourceData.routes;
+    }
+    if (Array.isArray(sourceData.nodes) && sourceData.nodes.length) {
+        optNodes = sourceData.nodes;
+    }
+    if (sourceData.inventory && Object.keys(sourceData.inventory).length) {
+        optInventory = sourceData.inventory;
+    }
+}
+
+function displayResultsLegacy(result) {
     document.getElementById('solveProgress').style.display = 'none';
     document.getElementById('solveResults').style.display = 'block';
 
@@ -466,7 +535,7 @@ function displayResults(result) {
     showNotification('✅ MILP Optimization complete!', 'success');
 }
 
-async function saveOptimizationResult(result) {
+async function saveOptimizationResultLegacy(result) {
     try {
         const payload = {
             totalCost: result.totalCost,
@@ -498,5 +567,168 @@ async function saveOptimizationResult(result) {
         }
     } catch (e) {
         console.error('[Optimizer Studio] Failed to persist result', e);
+    }
+}
+
+function displayResults(result) {
+    document.getElementById('solveProgress').style.display = 'none';
+    document.getElementById('solveResults').style.display = 'block';
+
+    document.getElementById('solveTotalCost').textContent = formatINR(result.totalCost, true);
+
+    const savings = result.savings?.totalSaved || 0;
+    document.getElementById('solveSavings').textContent = savings > 0 ? formatINR(savings, true) : '₹0';
+    document.getElementById('solveFeasible').textContent = result.feasible ? 'OPTIMAL' : 'FEASIBLE';
+    document.getElementById('solveFeasible').style.color = result.feasible ? '#10b981' : '#f59e0b';
+
+    const breakdownEl = document.getElementById('solveCostBreakdown');
+    if (breakdownEl && result.costBreakdown) {
+        const cb = result.costBreakdown;
+        breakdownEl.innerHTML = Object.entries(cb).map(([k, v]) => `
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-primary);font-size:0.82rem">
+                <span style="color:var(--text-secondary);text-transform:capitalize">${k.replace(/([A-Z])/g, ' $1')}</span>
+                <span style="font-weight:600">${formatINR(v, true)}</span>
+            </div>
+        `).join('');
+    }
+
+    const vesselEl = document.getElementById('solveVesselSchedule');
+    if (vesselEl && result.vesselSchedule?.length) {
+        vesselEl.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+                <thead><tr style="background:var(--bg-card)">
+                    <th style="padding:10px;text-align:left">Vessel</th>
+                    <th style="padding:10px;text-align:left">Port</th>
+                    <th style="padding:10px;text-align:left">Material</th>
+                    <th style="padding:10px;text-align:right">Quantity</th>
+                    <th style="padding:10px;text-align:right">Demurrage</th>
+                    <th style="padding:10px;text-align:center">Status</th>
+                </tr></thead>
+                <tbody>
+                    ${result.vesselSchedule.map(v => `
+                        <tr style="border-bottom:1px solid var(--border-primary)">
+                            <td style="padding:10px">${v.vessel}</td>
+                            <td style="padding:10px;color:var(--text-muted)">${v.port}</td>
+                            <td style="padding:10px;color:var(--text-muted)">${v.material || '—'}</td>
+                            <td style="padding:10px;text-align:right">${(v.quantity || 0).toLocaleString()} MT</td>
+                            <td style="padding:10px;text-align:right;color:${v.demurrage > 0 ? '#ef4444' : '#10b981'}">
+                                ${v.demurrage > 0 ? formatINR(v.demurrage, true) : '—'}
+                            </td>
+                            <td style="padding:10px;text-align:center">
+                                <span style="background:${v.assigned ? '#f0fdf4' : '#fef2f2'};color:${v.assigned ? '#15803d' : '#991b1b'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
+                                    ${v.assigned ? 'BERTH ASSIGNED' : 'QUEUED'}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    const railEl = document.getElementById('solveRailPlan');
+    if (railEl && result.railPlan?.length) {
+        railEl.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+                <thead><tr style="background:var(--bg-card)">
+                    <th style="padding:10px;text-align:left">Rake ID</th>
+                    <th style="padding:10px;text-align:left">Route</th>
+                    <th style="padding:10px;text-align:right">Quantity</th>
+                    <th style="padding:10px;text-align:right">Cost</th>
+                    <th style="padding:10px;text-align:center">Status</th>
+                </tr></thead>
+                <tbody>
+                    ${result.railPlan.map(r => `
+                        <tr style="border-bottom:1px solid var(--border-primary)">
+                            <td style="padding:10px;font-weight:500">${r.rakeNumber || r.rakeId || '—'}</td>
+                            <td style="padding:10px;color:var(--text-muted)">${r.fromPortName || r.from || '?'} → ${r.toPlantName || r.to || '?'}</td>
+                            <td style="padding:10px;text-align:right">${(r.quantity || 0).toLocaleString()} MT</td>
+                            <td style="padding:10px;text-align:right">${formatINR(r.cost || 0, true)}</td>
+                            <td style="padding:10px;text-align:center">
+                                <span style="background:${r.used ? '#f0fdf4' : '#f1f5f9'};color:${r.used ? '#15803d' : '#475569'};padding:3px 8px;border-radius:12px;font-size:0.68rem;font-weight:700">
+                                    ${r.used ? 'ACTIVE' : 'STANDBY'}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    loadOptimizationHistory();
+    showNotification('✅ MILP Optimization complete!', 'success');
+}
+
+async function saveOptimizationResult(result) {
+    try {
+        const payload = {
+            ...result,
+            meta: {
+                ...(result.meta || {}),
+                source: 'optimizer_studio',
+                timestamp: new Date().toISOString()
+            }
+        };
+
+        if (typeof payload.totalCost !== 'number' || Number.isNaN(payload.totalCost)) {
+            console.error('[Optimizer Studio] Cannot save: totalCost is invalid', payload.totalCost);
+            return;
+        }
+
+        const res = await apiFetch('/api/optimizations', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        if (res && res.ok) {
+            const saved = await res.json();
+            console.log('[Optimizer Studio] Result persisted to DB ✔', saved.optimization?._id);
+            await loadOptimizationHistory();
+        } else {
+            const err = await res?.json();
+            console.error('[Optimizer Studio] Save failed:', err);
+        }
+    } catch (e) {
+        console.error('[Optimizer Studio] Failed to persist result', e);
+    }
+}
+
+async function loadOptimizationHistory() {
+    const container = document.getElementById('optimizationHistory');
+    if (!container) return;
+
+    try {
+        const res = await apiFetch('/api/optimizations');
+        const result = await res.json();
+        const items = result.data || [];
+
+        if (!items.length) {
+            container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem">No saved optimization history yet.</p>';
+            return;
+        }
+
+        container.innerHTML = items.slice(0, 5).map(item => {
+            const timestamp = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Unknown';
+            const routeCount = Array.isArray(item.routeHistory) ? item.routeHistory.length : (item.railPlan?.length || 0);
+            return `
+                <div style="padding:10px 0;border-bottom:1px solid var(--border-primary)">
+                    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                        <div>
+                            <div style="font-size:0.82rem;font-weight:600">${formatINR(item.totalCost || 0, true)}</div>
+                            <div style="font-size:0.7rem;color:var(--text-muted)">${timestamp}</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div style="font-size:0.72rem;color:var(--text-muted)">${routeCount} routes</div>
+                            <div style="font-size:0.72rem;color:${item.meta?.isInitialBaseline ? '#f59e0b' : '#10b981'};font-weight:700">
+                                ${item.meta?.isInitialBaseline ? 'BASELINE' : 'SAVED'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem">History unavailable right now.</p>';
     }
 }
