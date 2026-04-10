@@ -11,7 +11,7 @@ let optRakes = null;
 let optInventory = null;
 let solverResult = null;
 
-export function renderOptimizerPanel() {
+export function renderOptimizerPanel(autoRun = false) {
     const container = document.getElementById('optimizerStudioContent');
     if (!container) return;
 
@@ -143,6 +143,15 @@ export function renderOptimizerPanel() {
     `;
 
     bindOptStudioEvents();
+
+    if (autoRun) {
+        // Skip straight to Step 4 and trigger optimization
+        setTimeout(() => {
+            goToOptStep(4);
+            const solveBtn = document.getElementById('btnSolve');
+            if (solveBtn) solveBtn.click();
+        }, 100);
+    }
 }
 
 function bindOptStudioEvents() {

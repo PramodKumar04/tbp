@@ -24,6 +24,7 @@ import { apiFetch } from './utils/api.js';
 import { renderLandingView } from './ui/landing-view.js';
 import { renderDashboardView } from './ui/dashboard-view.js';
 import { renderPredictionsPanel } from './ui/ml-predictions.js';
+import { renderUserProfile, toggleProfile } from './ui/user-profile.js';
 
 // ── Application State ────────────────────────────────────
 let appData = { vessels: [], rakes: [], inventory: {} };
@@ -118,6 +119,17 @@ export async function initApp() {
     });
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => auth.logout());
+
+    // Initialize User Profile Side-Panel
+    renderUserProfile();
+
+    // Global listener for profile trigger (since header is dynamic)
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('#dashboardProfileTrigger');
+        if (trigger) {
+            toggleProfile(true);
+        }
+    });
 }
 
 async function loadAppData() {
@@ -275,6 +287,37 @@ async function refreshDashboardSummary() {
     }
 }
 
+function calculateSupplyReliability(vessels, inventory, predictions) {
+    if (!vessels || !inventory) return 0.85;
+
+    // 1. Vessel Performance (40%): Ratio of on-time vessels
+    const onTimeVessels = vessels.filter(v => (v.delayHours || 0) < 24).length;
+    const vesselScore = vessels.length > 0 ? (onTimeVessels / vessels.length) : 0.9;
+
+    // 2. Inventory Buffer (40%): Average margin above safety stock across all plants/materials
+    let inventoryScores = [];
+    for (const plant in inventory) {
+        for (const mat in inventory[plant]) {
+            const current = inventory[plant][mat].currentLevel || 0;
+            const safety = inventory[plant][mat].safetyStock || 1;
+            // 1.0 if current > 1.2 * safety, 0.0 if current < safety
+            const margin = Math.min(1, Math.max(0, (current - safety) / (safety * 0.2)));
+            inventoryScores.push(margin);
+        }
+    }
+    const inventoryScore = inventoryScores.length > 0 
+        ? inventoryScores.reduce((a, b) => a + b, 0) / inventoryScores.length 
+        : 0.8;
+
+    // 3. AI Prediction Confidence (20%): Average model confidence
+    const confidenceScore = predictions && predictions.length > 0
+        ? predictions.reduce((acc, p) => acc + (p.confidence || 0.75), 0) / predictions.length
+        : 0.85;
+
+    const weightedScore = (vesselScore * 0.4) + (inventoryScore * 0.4) + (confidenceScore * 0.2);
+    return Math.min(1, Math.max(0.1, weightedScore));
+}
+
 function mapInventory(raw) {
     const structured = {};
     raw.forEach(row => {
@@ -300,7 +343,7 @@ function normalizeAppData() {
     }));
 }
 
-export function switchPanel(panelId) {
+export function switchPanel(panelId, autoRun = false) {
     currentPanel = panelId;
     
     const navItems = document.querySelectorAll('.nav-item');
@@ -373,7 +416,10 @@ export function switchPanel(panelId) {
         }
         case 'datainput': {
             renderDataInput(container, () => {
-                loadAppData().then(() => refreshDashboardSummary());
+                loadAppData().then(() => {
+                    refreshDashboardSummary();
+                    switchPanel('optimizer', true);
+                });
             }); 
             break;
         }
@@ -386,7 +432,7 @@ export function switchPanel(panelId) {
             break;
         }
         case 'optimizer': {
-            renderOptimizerPanel(); 
+            renderOptimizerPanel(autoRun); 
             break;
         }
     }
@@ -435,9 +481,12 @@ function renderOverviewPanel() {
         // 3. Inventory — always from live projection
         renderInventoryChart('inventoryAreaChart', appData.inventoryProjection || {});
 
-        // 4. Reliability gauge — use stored value from DB
-        const reliability = dashboardSummary.savings?.supplyReliability ?? 85;
-        renderReliabilityGauge('reliabilityGauge', reliability);
+        // 4. Reliability gauge — Dynamic real-time calculation
+        const reliability = calculateSupplyReliability(appData.vessels, appData.inventory, activePredictions);
+        const gaugeContainer = document.getElementById('reliabilityGauge');
+        if (gaugeContainer) {
+            renderReliabilityGauge(gaugeContainer, reliability);
+        }
     }, 100);
 }
 

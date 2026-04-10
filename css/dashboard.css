@@ -570,3 +570,30 @@
     color: var(--accent-purple);
     font-size: 1.2rem;
 }
+
+/* 🧭 Supply Reliability Gauge Styles */
+.gauge-container {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.gauge-svg {
+    width: 100%;
+    height: auto;
+}
+
+.gauge-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 12;
+    stroke-linecap: round;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
+}
+

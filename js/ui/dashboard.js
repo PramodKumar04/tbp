@@ -82,6 +82,9 @@ export function renderPageHeader(container, title, subtitle) {
             <p class="page-subtitle">${subtitle}</p>
         </div>
         <div class="page-header-right">
+            <div class="profile-trigger" id="dashboardProfileTrigger" title="User Profile">
+                <span>👤</span>
+            </div>
             <span class="live-indicator">Real-Time Data</span>
             <span class="last-updated" id="lastUpdated"></span>
         </div>
