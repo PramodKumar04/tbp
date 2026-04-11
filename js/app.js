@@ -583,27 +583,34 @@ export function switchPanel(panelId, autoRun = false) {
             break;
         }
         case 'whatif': {
-            // Prefer booked/planned vessels first, then remaining live vessels
-            const bookedIds = new Set(bookedVessels.map(v => v.id));
-            const unbookedVessels = appData.vessels.filter(v => !bookedIds.has(v.id));
-            const taggedBooked = bookedVessels.map(v => ({ ...v, planned: true }));
-            const allVessels = [...taggedBooked, ...unbookedVessels];
-            const plannedRakes = bookedVessels
-                .map(bp => bp.rake || bp.planRoute || bp.route)
-                .filter(Boolean);
+            // CRITICAL: For mathematical parity and completeness, enrich the dashboard 
+            // routes by linking them back to the full vessel data objects.
+            const dashboardVessels = dashboardSummary.activeRoutes || [];
+            
+            const enrichedVessels = dashboardVessels.map(dv => {
+                const original = appData.vessels.find(v => String(v.id) === String(dv.vesselId) || String(v.vesselId) === String(dv.vesselId));
+                // Merge Properties: Prefer original data context, then dashboard state
+                return { 
+                    ...original, 
+                    ...dv, 
+                    // Ensure core properties for simulation are strictly mapped
+                    destinationPort: dv.destinationPort || original?.destinationPort,
+                    quantity: dv.quantity || original?.quantity || 30000 
+                };
+            });
 
-            const rakesToUse = plannedRakes.length > 0
-                ? plannedRakes
-                : (dashboardSummary.activeRakes && dashboardSummary.activeRakes.length > 0)
-                    ? dashboardSummary.activeRakes.filter(r => r.used)
-                    : appData.rakes || [];
+            const baseVessels = (enrichedVessels.length > 0) ? enrichedVessels : appData.vessels;
+            const baseRakes = (dashboardSummary.activeRakes && dashboardSummary.activeRakes.length > 0)
+                ? dashboardSummary.activeRakes
+                : appData.rakes || [];
 
             const whatIfData = {
                 ...appData,
-                vessels: allVessels,
-                rakes: rakesToUse,
+                vessels: baseVessels,
+                rakes: baseRakes,
                 plannedVessels: bookedVessels,
-                plannedRakes,
+                // Ensure helper pools are also consistent
+                _originalFleet: true 
             };
             renderWhatIfPanel(container, whatIfData, dashboardSummary); 
             break;

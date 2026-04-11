@@ -5,7 +5,7 @@
 import { reOptimize } from './optimizer.js';
 import { deepClone } from '../utils/helpers.js';
 import { predictor } from './prediction.js';
-import { PORTS } from '../data/constants.js';
+import { PORTS, PLANTS, MATERIALS } from '../data/constants.js';
 
 function toNumber(value, fallback = 0) {
     const num = Number.parseFloat(value);
@@ -87,6 +87,8 @@ export function runSimulation(scenario, data, baselineResults) {
     const { type, params = {} } = scenario;
     const modifications = { constraints: {} };
     let explicitPenalties = 0;
+    let affectedCount = 0;
+    let mRisk = 1.0;
 
     const mlConstraints = predictor.getConstraints() || {};
 
@@ -105,8 +107,9 @@ export function runSimulation(scenario, data, baselineResults) {
     try {
         switch (type) {
             case 'vessel_delay': {
-                const additionalHours = Math.max(0, toNumber(params.additionalHours, 0));
-                const selectedVessel = findMatchingVessel(modifiedVessels, params.vesselId, params._vesselDetails);
+                const vesselId = params.vesselId;
+                const additionalHours = parseFloat(params.additionalHours || 48);
+                const selectedVessel = findMatchingVessel(modifiedVessels, vesselId, params._vesselDetails);
 
                 modifications.vesselDelay = {
                     vesselId: params.vesselId,
@@ -114,15 +117,20 @@ export function runSimulation(scenario, data, baselineResults) {
                 };
 
                 if (selectedVessel) {
-                    const freightBase = toNumber(selectedVessel.freightCost, 0);
-                    const quantity = toNumber(selectedVessel.quantity, 0);
-                    const vesselBaseValue = Math.max(25000, freightBase + (quantity * 0.18));
-                    const hourlyDelayCost = vesselBaseValue / 72;
+                    affectedCount = 1;
+                    const freightBase = toNumber(selectedVessel.freightCost, 0) || (toNumber(selectedVessel.quantity, 30000) * 120);
+                    const quantity = toNumber(selectedVessel.quantity, 30000);
+                    const vesselBaseValue = Math.max(5000000, freightBase + (quantity * 0.18));
+                    
+                    mRisk = 1 + (toNumber(mlConstraints.weatherRiskFactor, 1.0) - 1) + (toNumber(mlConstraints.monsoonPenalty, 1.0) - 1);
+                    const hourlyDelayCost = (vesselBaseValue / 72) * mRisk;
+                    
                     explicitPenalties += Math.round(hourlyDelayCost * additionalHours);
-                    modifications.constraints.delayPenaltyMultiplier = 1 + Math.min(1.5, additionalHours / 72);
-                    modifications.constraints.portCapacityFactor = 1 + Math.min(0.12, additionalHours / 360);
+                    modifications.constraints.delayPenaltyMultiplier = mRisk;
+                    modifications.constraints.portCapacityFactor = 1 - Math.min(0.15, additionalHours / 480);
                 } else {
-                    explicitPenalties += Math.round(50000 * additionalHours);
+                    mRisk = 2.5 + (toNumber(mlConstraints.weatherRiskFactor, 1.0) - 1);
+                    explicitPenalties += Math.round(75000 * additionalHours * mRisk); 
                 }
                 break;
             }
@@ -133,6 +141,7 @@ export function runSimulation(scenario, data, baselineResults) {
                 const cancelledRake = findMatchingRake(modifiedRakes, rakeId, rakeDetails);
 
                 if (cancelledRake) {
+                    affectedCount = 1;
                     modifications.trainCancelled = { rakeId };
 
                     const quantity = toNumber(cancelledRake.quantity || cancelledRake.qty, 2500);
@@ -159,6 +168,7 @@ export function runSimulation(scenario, data, baselineResults) {
                     plantId: params.plantId,
                     percentIncrease: pct,
                 };
+                affectedCount = 1;
 
                 modifications.constraints = modifications.constraints || {};
                 modifications.constraints.demandSpike = modifications.constraints.demandSpike || {};
@@ -199,7 +209,7 @@ export function runSimulation(scenario, data, baselineResults) {
                     explicitPenalties += additionalTransportCost + rushHandlingBuffer;
 
                     modifications.constraints.rakeAvailabilityFactor = Math.max(0.65, 1 - (pct / 250));
-                    modifications.constraints.portCapacityFactor = 1 + Math.min(0.2, pct / 250);
+                    modifications.constraints.portCapacityFactor = 1 - Math.min(0.2, pct / 250);
                 } catch (err) {
                     explicitPenalties += Math.round(750000 * Math.max(1, pct / 5));
                 }
@@ -213,23 +223,30 @@ export function runSimulation(scenario, data, baselineResults) {
                     days,
                 };
 
-                const affectedVessels = modifiedVessels.filter(v => v.destinationPort === params.portId).length;
-                explicitPenalties += Math.round(affectedVessels * days * 2500000);
+                // Defensive check across multiple naming conventions (destinationPort, portId, port)
+                const targetPortId = String(params.portId).toLowerCase();
+                affectedCount = modifiedVessels.filter(v => {
+                    const vPort = String(v.destinationPort || v.portId || v.port || '').toLowerCase();
+                    return vPort === targetPortId || vPort.includes(targetPortId);
+                }).length;
 
-                const otherPorts = PORTS.filter(p => p.id !== params.portId);
-                modifiedVessels.forEach(v => {
-                    if (v.destinationPort === params.portId) {
-                        const targetPort = otherPorts[Math.floor(Math.random() * otherPorts.length)];
-                        v.destinationPort = targetPort.id;
-                        v.delayHours = (v.delayHours || 0) + (24 * days);
-                        v.demurrageDays = (v.demurrageDays || 0) + (days * (mlConstraints.weatherRiskFactor || 1));
-                    }
-                });
+                mRisk = 2.5 + (toNumber(mlConstraints.weatherRiskFactor, 1.0) - 1);
+                
+                // MATH: Base Disruption Fee (₹2 Cr/day) + Per-Vessel Rerouting Penalty
+                const baseDisruptionFee = days * 20000000 * mRisk; 
+                const perVesselPenalty = affectedCount * days * 1250000 * mRisk;
+                
+                explicitPenalties += Math.round(baseDisruptionFee + perVesselPenalty);
+                
+                console.log(`[Mathematician] Port Closure: Port=${params.portId}, Days=${days}, Affected=${affectedCount}, mRisk=${mRisk.toFixed(2)}, TotalPenalty=${explicitPenalties}`);
                 break;
             }
 
             case 'weather_disruption': {
                 const multiplier = parseFloat(params.multiplier || 1.5);
+                affectedCount = modifiedVessels.length;
+                mRisk = multiplier * (toNumber(mlConstraints.weatherRiskFactor, 1.0));
+                
                 const baselineWeatherExposure = modifiedVessels.reduce((sum, v) => {
                     const vesselDelay = predictor.trained
                         ? (predictor.predictVesselDelay(v).predictedDelay || 0)
@@ -259,7 +276,7 @@ export function runSimulation(scenario, data, baselineResults) {
 
     if (optimizedResult) {
         optimizedResult.totalCost += explicitPenalties;
-        optimizedResult.costBreakdown.penalties = explicitPenalties;
+        optimizedResult.costBreakdown.penalties = (optimizedResult.costBreakdown.penalties || 0) + explicitPenalties;
     }
 
     const baseCB = baselineResults?.costBreakdown || { freight: 0, demurrage: 0, portHandling: 0, railTransport: 0 };
@@ -278,6 +295,14 @@ export function runSimulation(scenario, data, baselineResults) {
             handlingChange: (optCB.portHandling || 0) - (baseCB.portHandling || 0),
             railChange: (optCB.railTransport || 0) - (baseCB.railTransport || 0),
             penaltyChange: (optCB.penalties || 0),
+        },
+        meta: {
+            affectedCount,
+            mRisk: mRisk.toFixed(2),
+            days: params.days || params.duration || (params.additionalHours ? params.additionalHours / 24 : 0),
+            portName: PORTS.find(p => p.id === params.portId)?.name,
+            plantName: PLANTS.find(p => p.id === params.plantId)?.name,
+            vesselName: findMatchingVessel(modifiedVessels, params.vesselId)?.name,
         },
         scenarioType: type,
         scenarioParams: params,
@@ -299,18 +324,22 @@ function createFallbackResult(baseline) {
  * Generate summary text for a scenario result
  */
 export function getScenarioSummary(comparison) {
-    const { impact, scenarioType } = comparison;
+    const { impact, scenarioType, meta } = comparison;
     const costDir = impact.costChange > 0 ? 'increase' : 'decrease';
     const absChange = Math.abs(impact.costChangePercent).toFixed(1);
     const impactType = impact.costChange > 0 ? 'Disruption Impact' : 'Potential Saving';
 
+    const mRiskStr = meta?.mRisk ? ` with an AI risk multiplier of ${meta.mRisk}x` : '';
+    const affectedStr = meta?.affectedCount ? ` affecting ${meta.affectedCount} ${scenarioType === 'train_cancelled' ? 'rake' : 'vessel'}${meta.affectedCount > 1 ? 's' : ''}` : '';
+    const durationStr = meta?.days ? ` across ${meta.days} days` : '';
+
     const summaries = {
-        vessel_delay: `${impactType}: Vessel delay causes a ${absChange}% cost ${costDir}. Demurrage and late arrival fees are the primary drivers.`,
-        train_cancelled: `${impactType}: Train cancellation creates a ${absChange}% ${costDir} in total operating costs due to required emergency fallback and inventory risks.`,
-        demand_spike: `${impactType}: ${absChange}% budget ${costDir} observed. Logistics fleet stretched to accommodate increased plant requirements.`,
-        port_closure: `${impactType}: CRITICAL - Port closure results in a ${absChange}% ${costDir} driven by expensive rerouting and demurrage on diverted vessels.`,
-        weather_disruption: `${impactType}: Network-wide weather event leads to a ${absChange}% budget ${costDir}. Model accounts for weather penalties and increased turnaround time.`,
+        vessel_delay: `${impactType}: Delay for ${meta?.vesselName || 'vessel'}${durationStr} results in a ${absChange}% budget ${costDir} due to scaled demurrage and wait penalties.`,
+        train_cancelled: `${impactType}: Cancellation of rake ${affectedStr} creates a ${absChange}% budget ${costDir}. Gap filled by ₹${(impact.penaltyChange / 10000000).toFixed(2)} Cr in operational shortfall penalties.`,
+        demand_spike: `${impactType}: A ${absChange}% budget ${costDir} observed at ${meta?.plantName || 'plant'}. Operational risk reflects increased throughput stress${mRiskStr}.`,
+        port_closure: `${impactType}: CRITICAL - Closure of ${meta?.portName || 'port'}${durationStr}${affectedStr} results in a ${absChange}% budget ${costDir}. Primarily driven by ₹${(impact.penaltyChange / 10000000).toFixed(2)} Cr in unmet demand penalties and rerouting costs.`,
+        weather_disruption: `${impactType}: Regional weather event leads to a ${absChange}% budget ${costDir}. Analysis incorporates model-predicted delay variances and turn-around penalties.`,
     };
 
-    return summaries[scenarioType] || `Scenario results in a ${absChange}% cost ${costDir}.`;
+    return summaries[scenarioType] || `Scenario results in a ${absChange}% budget ${costDir}.`;
 }

@@ -203,10 +203,20 @@ function scoreRouteCandidate(route, vessel, inventory, dynamicConstraints = {}) 
     const timePenalty = (route.avgTime || 0) * vessel.quantity * 18;
     const delayPenalty = ((trainDelay * weatherRisk) + vesselDelay) * 25000 * monsoonPenalty;
     const riskPenalty = (dynamicConstraints.delayPenaltyMultiplier || 1) * (trainDelay + vesselDelay) * 15000;
-    const availabilityPenalty = route.available ? 0 : railCost * 0.5;
+    
+    // Impact of Port/Rake availability constraints on greedy scoring
+    const portCap = toNumber(dynamicConstraints.portCapacityFactor, 1.0);
+    const rakeAvail = toNumber(dynamicConstraints.rakeAvailabilityFactor, 1.0);
+    
+    const availabilityPenalty = (route.available && rakeAvail > 0) ? 0 : railCost * 5.0; // Heavy penalty for unavailable routes
+    const portClosurePenalty = (portCap <= 0 && route.fromPort) ? railCost * 10.0 : 0; // Extreme penalty for closed ports
+    const capacityTightnessPenalty = (1 - portCap) * railCost * 0.5 + (1 - rakeAvail) * railCost * 0.5;
+
     const demandBonus = demandPressure * railCost * 0.12;
 
-    const score = railCost + timePenalty + delayPenalty + riskPenalty + capacityPenalty + availabilityPenalty + materialMismatchPenalty - demandBonus;
+    const score = railCost + timePenalty + delayPenalty + riskPenalty + capacityPenalty + 
+                  availabilityPenalty + portClosurePenalty + capacityTightnessPenalty + 
+                  materialMismatchPenalty - demandBonus;
 
     return {
         ...route,
@@ -358,10 +368,10 @@ function chooseBestRoutes(vessels, routePool, inventory, dynamicConstraints = {}
         });
 
         vesselSchedule.push({
-            vessel: vessel.name,
+            name: vessel.name,
             vesselId: vessel.id,
-            port: vessel.destinationPortName || safeName(PORTS, vessel.destinationPort, 'Unknown Port'),
-            portId: vessel.destinationPort,
+            destinationPort: vessel.destinationPort,
+            destinationPortName: vessel.destinationPortName || safeName(PORTS, vessel.destinationPort, 'Unknown Port'),
             targetPlant: targetPlant.name,
             targetPlantId: targetPlant.id,
             routeId: selectedRoute.routeId,
@@ -400,7 +410,39 @@ function buildEnterpriseOptimizationResult(vessels, candidates, inventory, dynam
     const routePool = buildRoutePool(routeCandidates, candidates || [], nodeCandidates);
     const { vesselSchedule, railPlan, routeHistory, totals } = chooseBestRoutes(normalizedVessels, routePool, normalizedInventory, dynamicConstraints);
 
-    const penalties = Math.round(routeHistory.reduce((sum, item) => sum + item.selectedRoute.score * 0.01, 0));
+    // --- 🟢 Dynamic Logistics Mathematician Model ---
+    const totalTonnage = (vesselSchedule || []).reduce((sum, v) => sum + toNumber(v.quantity, 0), 0) || 1;
+    const avgTransportCost = Math.round(totals.railTransport / totalTonnage) || 1200; // Base: INR 1,200/ton baseline transport cost
+    
+    // ML-Derived Risk Multiplier (M_risk)
+    const mRisk = 2.5 + 
+                 (toNumber(dynamicConstraints.weatherRiskFactor, 1.0) - 1) + 
+                 (toNumber(dynamicConstraints.monsoonPenalty, 1.0) - 1);
+
+    let shortfallPenalties = 0;
+    for (const plant of PLANTS) {
+        for (const mat of MATERIALS) {
+            const daily = plant.dailyConsumption[mat.id];
+            if (!daily) continue;
+
+            const currentInv = normalizedInventory[plant.id]?.[mat.id]?.currentLevel || 0;
+            const safetyStock = daily * plant.safetyStockDays;
+            
+            const totalDelivered = railPlan
+                .filter(r => (r.toPlant === plant.id || r.to === plant.id) && (r.material === mat.id || r.material === mat.name) && r.used)
+                .reduce((sum, r) => sum + r.quantity, 0);
+
+            const endBalance = currentInv + totalDelivered - (daily * 3);
+            
+            if (endBalance < safetyStock) {
+                const deficit = safetyStock - endBalance;
+                // Penalize shortfall: Deficit * (AvgCost * M_risk)
+                shortfallPenalties += Math.round(deficit * (avgTransportCost * mRisk));
+            }
+        }
+    }
+
+    const penalties = Math.round(routeHistory.reduce((sum, item) => sum + item.selectedRoute.score * 0.01, 0)) + shortfallPenalties;
     const costBreakdown = {
         freight: Math.round(totals.freight),
         portHandling: Math.round(totals.portHandling),
@@ -569,7 +611,8 @@ function buildModel(vessels, rakes, inventory, dynamicConstraints = {}) {
     for (const port of PORTS) {
         // Congestion signal: derived from vessels heading to this port
         const congestionSignal = vessels.filter(v => v.destinationPort === port.id).length / (port.berths * 2);
-        const scaledBerths = Math.max(1, Math.floor(port.berths * portCapacityFactor * (1 - Math.min(0.5, congestionSignal))));
+        // Fix: Allow 0 berths if portCapacityFactor is 0 (Port Closure)
+        const scaledBerths = portCapacityFactor <= 0 ? 0 : Math.max(1, Math.floor(port.berths * portCapacityFactor * (1 - Math.min(0.5, congestionSignal))));
         
         model.constraints[`port_${port.id}_berth`] = { max: scaledBerths };
     }
@@ -651,7 +694,7 @@ export function interpretSolution(solution, vessels, rakes, inventory, dynamicCo
         const assigned = (solution[`berth_${i}`] || 0) > 0;
         const port = PORTS.find(p => p.id === v.destinationPort);
 
-        const freight = v.freightCost || 0;
+        const freight = v.freightCost || Math.round(v.quantity * COST_PARAMS.freightCostPerTon * COST_PARAMS.usdToInr);
         const handling = port ? (port.handlingCost || 320) * v.quantity : 320 * v.quantity;
         
         // --- 🟢 Fix: Ensure interpretSolution uses the SAME mlDelay as the solver ---
@@ -677,10 +720,10 @@ export function interpretSolution(solution, vessels, rakes, inventory, dynamicCo
         }
 
         results.vesselSchedule.push({
-            vessel: v.name,
+            name: v.name,
             vesselId: v.id,
+            destinationPort: v.destinationPort,
             port: port?.name || 'Unknown',
-            portId: v.destinationPort,
             berth: v.berthAssigned || (assigned ? Math.ceil(Math.random() * (port?.berths || 3)) : null),
             material: v.materialName,
             quantity: v.quantity,
@@ -736,12 +779,16 @@ export function interpretSolution(solution, vessels, rakes, inventory, dynamicCo
                 .filter(r => r.to === plant.id && r.material === mat.id && r.used)
                 .reduce((sum, r) => sum + r.quantity, 0);
 
-            const endBalance = currentInv + totalDelivered - (daily * 3); // 3-day window check
+            const endBalance = currentInv + totalDelivered - (daily * 3);
             
             if (endBalance < safetyStock) {
                 const deficit = safetyStock - endBalance;
-                // Penalize shortfall: ₹5,000 per ton (approx cost of emergency procurement)
-                shortfallPenalties += deficit * 5000;
+                // Reuse Dynamic Mathematician logic for shortfall
+                const baseCost = results.totalCost / (sum(vessels.map(v => v.quantity)) || 1);
+                const avgTransportCost = Math.max(1200, Math.min(2500, baseCost)); 
+                const mRisk = 2.5 + (mlDelay / 12) + (monsoonPenalty - 1);
+                
+                shortfallPenalties += Math.round(deficit * (avgTransportCost * mRisk));
             }
         }
     }
@@ -808,18 +855,26 @@ export function reOptimize(vessels, rakes, inventory, modifications = {}) {
     }
 
     if (modifications.portClosure) {
-        const { portId } = modifications.portClosure;
+        const { portId, days } = modifications.portClosure;
+        const targetPortId = String(portId).toLowerCase();
+        
         constraints.portCapacityFactor = 0; // Close the port
         modifiedVessels = modifiedVessels.map(v => {
-            if (v.destinationPort === portId) {
+            const vPort = String(v.destinationPort || v.portId || v.port || '').toLowerCase();
+            if (vPort === targetPortId || vPort.includes(targetPortId)) {
                 // Reroute vessels - find another port
-                const otherPorts = PORTS.filter(p => p.id !== portId);
+                const otherPorts = PORTS.filter(p => !String(p.id).toLowerCase().includes(targetPortId));
                 const newPort = otherPorts[Math.floor(Math.random() * otherPorts.length)];
+                
+                // MATH: Delay is proportional to closure duration + rerouting overhead
+                const rerouteDelay = 12; // 12h overhead for rerouting
+                const totalDelay = (days * 24) + rerouteDelay;
+                
                 return {
                     ...v,
                     destinationPort: newPort.id,
-                    delayHours: (v.delayHours || 0) + 48, // Penalty for rerouting
-                    demurrageDays: (v.demurrageDays || 0) + 2,
+                    delayHours: (v.delayHours || 0) + totalDelay,
+                    demurrageDays: (v.demurrageDays || 0) + days,
                 };
             }
             return v;
