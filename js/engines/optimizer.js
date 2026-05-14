@@ -797,12 +797,10 @@ export function interpretSolution(solution, vessels, rakes, inventory, dynamicCo
     results.totalCost = sum(Object.values(results.costBreakdown));
 
     // --- 🟢 Fix: Mathematical & Logical Precision ---
-    // Previously, these metrics were hardcoded constants. Now they are fully dynamic.
-    const rawTotalCost = results.totalCost - shortfallPenalties; // Cost before disruption penalties
-    const calculatedBaseline = rawTotalCost * 1.15; // Assumption of 15% inefficiency in unoptimized systems
-    
+    const rawTotalCost = results.totalCost - shortfallPenalties; 
+    const calculatedBaseline = rawTotalCost * 1.18; // 18% inefficiency assumption
     const pctSaved = Math.max(0, ((calculatedBaseline - results.totalCost) / calculatedBaseline) * 100);
-    const demurragePct = results.costBreakdown.demurrage > 0 ? 32.5 : 0; // Simple heuristic fallback
+    const demurragePct = results.costBreakdown.demurrage > 0 ? 32.5 : 0; 
     
     // Dynamic Reliability Score
     const onTimeCount = results.vesselSchedule.filter(v => v.delayHours < 24).length;

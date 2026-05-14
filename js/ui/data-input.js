@@ -43,7 +43,7 @@ export function renderDataInput(container, onDataApply) {
                         </svg>
                     </div>
                     <h3 class="di-option-title">Upload Excel File</h3>
-                    <p class="di-option-desc">Drag & drop or click to browse templates</p>
+                    <p class="di-option-desc">Drag &amp; drop or click to browse templates</p>
                     <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none">
                 </div>
 
@@ -63,7 +63,7 @@ export function renderDataInput(container, onDataApply) {
                 </div>
             </div>
 
-            <!-- Upload Drop Zone (appears when hovering with file) -->
+            <!-- Upload Drop Zone -->
             <div class="di-dropzone" id="dropZone" style="display:none">
                 <div class="di-dropzone-inner">
                     <span style="font-size:3rem">📄</span>
@@ -99,61 +99,38 @@ export function renderDataInput(container, onDataApply) {
         </div>
     `;
 
-    // ── Bind Events ─────────────────────────────────────
     const fileInput = container.querySelector('#fileInput');
     const uploadCard = container.querySelector('#uploadCard');
     const whiteboardCard = container.querySelector('#whiteboardCard');
     const dropZone = container.querySelector('#dropZone');
 
-    // Upload click
     uploadCard?.addEventListener('click', () => fileInput?.click());
 
-    // File selected
     fileInput?.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             handleFileUpload(e.target.files[0], container, onDataApply);
         }
     });
 
-    // Whiteboard click
     whiteboardCard?.addEventListener('click', () => {
         currentView = 'whiteboard';
         renderDataInput(container, onDataApply);
     });
 
-    // Drag & drop
     const wrapper = container.querySelector('.data-input-wrapper');
     if (wrapper) {
-        wrapper.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            if (dropZone) dropZone.style.display = 'flex';
-        });
-        wrapper.addEventListener('dragover', (e) => {
-            e.preventDefault();
-        });
-        wrapper.addEventListener('dragleave', (e) => {
-            if (!wrapper.contains(e.relatedTarget)) {
-                if (dropZone) dropZone.style.display = 'none';
-            }
-        });
+        wrapper.addEventListener('dragenter', (e) => { e.preventDefault(); if (dropZone) dropZone.style.display = 'flex'; });
+        wrapper.addEventListener('dragover', (e) => { e.preventDefault(); });
+        wrapper.addEventListener('dragleave', (e) => { if (!wrapper.contains(e.relatedTarget)) { if (dropZone) dropZone.style.display = 'none'; } });
         wrapper.addEventListener('drop', (e) => {
             e.preventDefault();
             if (dropZone) dropZone.style.display = 'none';
-            if (e.dataTransfer.files.length > 0) {
-                handleFileUpload(e.dataTransfer.files[0], container, onDataApply);
-            }
+            if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files[0], container, onDataApply);
         });
     }
 
-    // Template download
-    container.querySelector('#downloadTemplateBtn')?.addEventListener('click', () => {
-        generateTemplate('full');
-    });
-
-    // Use loaded data
-    container.querySelector('#useLoadedDataBtn')?.addEventListener('click', () => {
-        if (onDataApply && uploadedData) onDataApply(uploadedData);
-    });
+    container.querySelector('#downloadTemplateBtn')?.addEventListener('click', () => generateTemplate('full'));
+    container.querySelector('#useLoadedDataBtn')?.addEventListener('click', () => { if (onDataApply && uploadedData) onDataApply(uploadedData); });
 }
 
 /**
@@ -169,18 +146,14 @@ async function handleFileUpload(file, container, onDataApply) {
     if (statusText) statusText.textContent = `Reading ${file.name}...`;
 
     try {
-        // Simulate progress
         await new Promise(r => setTimeout(r, 400));
         if (progressBar) progressBar.style.width = '60%';
         if (statusText) statusText.textContent = 'Parsing data...';
 
         const parsed = await parseUploadedFile(file);
-        const backendTypeMap = {
-            rakes: 'demand_rakes',
-        };
+        const backendTypeMap = { rakes: 'demand_rakes' };
         const backendType = backendTypeMap[parsed.type] || parsed.type;
 
-        // Upload to backend
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', backendType);
@@ -188,10 +161,7 @@ async function handleFileUpload(file, container, onDataApply) {
         const uploadRes = await apiUpload('/api/data/upload', formData);
         if (!uploadRes || !uploadRes.ok) {
             let errorMessage = 'Upload rejected by server';
-            try {
-                const err = await uploadRes?.json();
-                errorMessage = err?.error || errorMessage;
-            } catch {}
+            try { const err = await uploadRes?.json(); errorMessage = err?.error || errorMessage; } catch {}
             throw new Error(errorMessage);
         }
 
@@ -201,28 +171,28 @@ async function handleFileUpload(file, container, onDataApply) {
 
         uploadedData = { ...parsed, type: backendType, sourceType: parsed.type };
 
-        // Show preview
         await new Promise(r => setTimeout(r, 500));
         currentView = 'preview';
         renderDataInput(container, onDataApply);
 
     } catch (err) {
-        if (progressBar) {
-            progressBar.style.width = '100%';
-            progressBar.style.background = 'var(--accent-danger)';
-        }
+        if (progressBar) { progressBar.style.width = '100%'; progressBar.style.background = 'var(--accent-danger)'; }
         if (statusText) statusText.textContent = `✕ Error: ${err.message}`;
     }
 }
 
 /**
- * Render whiteboard view
+ * Render whiteboard view, optionally pre-populated from uploaded data
  */
-function renderWhiteboardView(container, onDataApply) {
+function renderWhiteboardView(container, onDataApply, preloadData = null) {
     container.innerHTML = '<div id="whiteboardContainer" style="height:100%;min-height:700px"></div>';
 
     whiteboard = new NetworkWhiteboard('whiteboardContainer');
     whiteboard.init(container.querySelector('#whiteboardContainer'));
+
+    if (preloadData && preloadData.length > 0) {
+        _populateWhiteboardFromData(whiteboard, preloadData);
+    }
 
     whiteboard.onClose = () => {
         currentView = 'input';
@@ -230,12 +200,89 @@ function renderWhiteboardView(container, onDataApply) {
     };
 
     whiteboard.onDataChange = (networkData) => {
-        // Convert whiteboard data to app format
         const converted = convertWhiteboardData(networkData);
         uploadedData = converted;
         currentView = 'preview';
         renderDataInput(container, onDataApply);
     };
+}
+
+/**
+ * Extract unique from→to pairs from uploaded records
+ */
+function _extractRoutePairs(records) {
+    if (!records || records.length === 0) return [];
+    const sample = records[0];
+
+    const findKey = (...patterns) => {
+        for (const key of Object.keys(sample)) {
+            const lower = key.toLowerCase().replace(/[\s_()-]/g, '');
+            for (const p of patterns) {
+                if (lower === p || lower.startsWith(p)) return key;
+            }
+        }
+        return null;
+    };
+
+    const fromKey = findKey('fromlocation', 'from', 'origin', 'source', 'originport');
+    const toKey   = findKey('tolocation', 'to', 'destination', 'dest', 'destinationport');
+
+    if (!fromKey || !toKey) return [];
+
+    const seen = new Set();
+    const pairs = [];
+    for (const row of records) {
+        const from = String(row[fromKey] || '').trim();
+        const to   = String(row[toKey]   || '').trim();
+        if (!from || !to) continue;
+        const key = `${from}|||${to}`;
+        if (!seen.has(key)) { seen.add(key); pairs.push({ from, to }); }
+    }
+    return pairs;
+}
+
+/**
+ * Auto-populate whiteboard from uploaded route data (from→to layout)
+ */
+function _populateWhiteboardFromData(wb, records) {
+    const pairs = _extractRoutePairs(records);
+    if (pairs.length === 0) return;
+
+    const fromNames = [...new Set(pairs.map(p => p.from))];
+    const toNames   = [...new Set(pairs.map(p => p.to))];
+    const nodeMap   = {};
+
+    const canvasH    = 500;
+    const leftX      = 180;
+    const rightX     = 720;
+    const fromSpacing = Math.min(110, (canvasH - 80) / Math.max(fromNames.length, 1));
+    const toSpacing   = Math.min(110, (canvasH - 80) / Math.max(toNames.length, 1));
+    const fromStartY  = (canvasH - fromSpacing * (fromNames.length - 1)) / 2;
+    const toStartY    = (canvasH - toSpacing   * (toNames.length   - 1)) / 2;
+
+    const uid = (p) => p + Math.random().toString(36).slice(2, 8);
+
+    fromNames.forEach((name, i) => {
+        const id = uid('nd');
+        nodeMap[name] = id;
+        wb.nodes.push({ id, type: 'supplier_port', label: name, x: leftX, y: fromStartY + i * fromSpacing, material: 'Raw Material Group', capacity: 1000, units: 1 });
+    });
+
+    toNames.forEach((name, i) => {
+        const id = uid('nd');
+        nodeMap[name] = id;
+        wb.nodes.push({ id, type: 'plant', label: name, x: rightX, y: toStartY + i * toSpacing, material: 'Raw Material Group', capacity: 1000, units: 1 });
+    });
+
+    pairs.forEach(pair => {
+        const fromId = nodeMap[pair.from];
+        const toId   = nodeMap[pair.to];
+        if (fromId && toId) {
+            wb.edges.push({ id: uid('eg'), from: fromId, to: toId, label: 'Inbound_RM', mode: 'Inbound_RM', material: 'Raw Material Group', minCapacity: 0, maxCapacity: 1000, costPerDistance: 1.5, costPerUOM: 0, available: true, period: new Date().getFullYear() });
+        }
+    });
+
+    wb._renderAll();
 }
 
 /**
@@ -258,13 +305,7 @@ function convertWhiteboardData(network) {
         available: edge.available !== false,
         period: edge.period || new Date().getFullYear(),
     }));
-
-    return {
-        type: 'routes',
-        data: routes,
-        nodes: network.nodes,
-        source: 'whiteboard',
-    };
+    return { type: 'routes', data: routes, nodes: network.nodes, source: 'whiteboard' };
 }
 
 /**
@@ -286,9 +327,13 @@ function renderPreviewView(container, onDataApply) {
                     <h2 class="di-title">Data Preview</h2>
                     <p class="di-subtitle">Review your data before applying to optimization</p>
                 </div>
-                <div style="display:flex;gap:8px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn btn-ghost btn-sm" id="backToInputBtn">← Back</button>
-                    <button class="btn btn-primary" id="applyDataBtn">✨ Apply & Optimize</button>
+                    <button class="btn btn-ghost btn-sm" id="viewWhiteboardBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                        Visualise on Whiteboard
+                    </button>
+                    <button class="btn btn-primary" id="applyDataBtn">✨ Apply &amp; Optimize</button>
                 </div>
             </div>
 
@@ -355,10 +400,15 @@ function renderPreviewView(container, onDataApply) {
         </div>
     `;
 
-    // Events
     container.querySelector('#backToInputBtn')?.addEventListener('click', () => {
         currentView = 'input';
         renderDataInput(container, onDataApply);
+    });
+
+    container.querySelector('#viewWhiteboardBtn')?.addEventListener('click', () => {
+        const recs = Array.isArray(uploadedData?.data) ? uploadedData.data : [];
+        currentView = 'whiteboard';
+        renderWhiteboardView(container, onDataApply, recs);
     });
 
     container.querySelector('#applyDataBtn')?.addEventListener('click', () => {
@@ -370,7 +420,7 @@ function renderPreviewView(container, onDataApply) {
 }
 
 function getNodeIcon(type) {
-    const icons = { port: '🚢', plant: '🏭', stockyard: '📦', supplier: '🌍' };
+    const icons = { port: '🚢', plant: '🏭', stockyard: '📦', supplier: '🌍', supplier_port: '🚢', warehouse: '📦', customer: '🛒' };
     return icons[type] || '📍';
 }
 
@@ -388,8 +438,5 @@ function showNotification(msg, type = 'info') {
 export function resetDataInput() {
     currentView = 'input';
     uploadedData = null;
-    if (whiteboard) {
-        whiteboard.destroy();
-        whiteboard = null;
-    }
+    whiteboard = null;
 }

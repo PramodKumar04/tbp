@@ -113,7 +113,7 @@ function bindMLStudioEvents() {
         if (statusText) statusText.textContent = `Processing ${file.name}...`;
 
         try {
-            const parsed = await parseUploadedFile(file);
+            const parsed = await parseUploadedFile(file, true);
             uploadedData = parsed.data;
             if (statusText) statusText.textContent = `✅ Loaded ${uploadedData.length} records from ${file.name}`;
             showNotification(`Loaded ${uploadedData.length} records!`, 'success');

@@ -31,7 +31,14 @@ app.use('/api/budget', require('./routes/budgetRoutes'));
 app.use('/api/inventory', require('./routes/inventoryRoutes'));
 
 // 📁 Serve static files from the project root
-app.use(express.static(path.resolve(__dirname, '..')));
+app.use(express.static(path.resolve(__dirname, '..'), {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+    }
+}));
 
 // 🔄 SPA Fallback: Serve index.html for non-API requests
 app.use((req, res, next) => {

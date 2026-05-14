@@ -51,10 +51,12 @@ async function getSummary(req, res, next) {
 
         const stats = agg[0] || { historicalTotal: 0, historicalSavings: 0, count: 0 };
 
+        const currentTotalSaved = currentSavings.totalSaved || 0;
+        
         res.json({
             historicalTotal: stats.historicalTotal,
             historicalSavings: stats.historicalSavings,
-            totalCost: latestOptim ? latestOptim.totalCost : 0,
+            totalCost: latestOptim ? (latestOptim.totalCost + currentTotalSaved) : 0,
             optimizedCost: latestOptim ? latestOptim.totalCost : 0,
             costBreakdown,
             savings: currentSavings,

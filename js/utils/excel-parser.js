@@ -93,7 +93,7 @@ function loadXLSX() {
 /**
  * Parse uploaded file (CSV or Excel)
  */
-export async function parseUploadedFile(file) {
+export async function parseUploadedFile(file, raw = false) {
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
 
     if (isExcel) {
@@ -106,7 +106,7 @@ export async function parseUploadedFile(file) {
                     const workbook = XLSX.read(data, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
                     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                    resolve(interpretData(rows));
+                    resolve(raw ? { type: 'raw', data: rows } : interpretData(rows));
                 } catch (err) {
                     reject(new Error('Failed to parse Excel: ' + err.message));
                 }
@@ -121,7 +121,7 @@ export async function parseUploadedFile(file) {
             reader.onload = (e) => {
                 try {
                     const rows = parseCSV(e.target.result);
-                    resolve(interpretData(rows));
+                    resolve(raw ? { type: 'raw', data: rows } : interpretData(rows));
                 } catch (err) {
                     reject(new Error('Failed to parse CSV: ' + err.message));
                 }

@@ -232,23 +232,65 @@ export class DelayPredictor {
             return { mae: 0, rmse: 0, r2: 0 };
         }
 
+        // findVal: first try exact match, then startsWith — prevents 'delay' matching 'delayHours'
+        const findVal = (obj, ...patterns) => {
+            for (const key of Object.keys(obj)) {
+                const lower = key.toLowerCase().replace(/[\s_-]/g, '');
+                for (const p of patterns) {
+                    if (lower === p.toLowerCase()) return obj[key];
+                }
+            }
+            for (const key of Object.keys(obj)) {
+                const lower = key.toLowerCase().replace(/[\s_-]/g, '');
+                for (const p of patterns) {
+                    if (lower.startsWith(p.toLowerCase())) return obj[key];
+                }
+            }
+            return undefined;
+        };
+
         // Robust preprocessing
         const cleanData = uploadedHistoricalData
-            .map(d => ({
-                ...d,
-                actualDelay:    isFinite(Number(d.actualDelay))    ? Number(d.actualDelay)    : 0,
-                originDistance: isFinite(Number(d.originDistance)) ? Number(d.originDistance) : this._getOriginDistance(d.origin),
-                portCongestion: isFinite(Number(d.portCongestion)) ? Number(d.portCongestion) : 0.5,
-                weatherScore:   isFinite(Number(d.weatherScore))   ? Number(d.weatherScore)   : 0.7,
-                vesselAge:      isFinite(Number(d.vesselAge))      ? Number(d.vesselAge)      : 10,
-                seasonIdx:      isFinite(Number(d.seasonIdx))      ? Number(d.seasonIdx)      : 2,
-            }))
-            .filter(d => d.actualDelay >= 0);
+            .map(d => {
+                // 'actualdelay' exact match won't hit 'delayhours'
+                const actDelay = findVal(d, 'actualdelay', 'actual', 'delay');
+                const origDist = findVal(d, 'origindistance', 'distance');
+                const pCongest = findVal(d, 'portcongestion', 'congestion');
+                const wScore   = findVal(d, 'weatherscore', 'weather');
+                const vAge     = findVal(d, 'vesselage', 'age');
+                const sIdx     = findVal(d, 'seasonidx', 'season');
+
+                const parsedDelay = (actDelay !== undefined && actDelay !== '') ? Number(actDelay) : null;
+
+                return {
+                    ...d,
+                    actualDelay:    (parsedDelay !== null && isFinite(parsedDelay)) ? parsedDelay : null,
+                    originDistance: isFinite(Number(origDist)) ? Number(origDist) : this._getOriginDistance(findVal(d, 'origin', 'from', 'source')),
+                    portCongestion: isFinite(Number(pCongest)) ? Number(pCongest) : 0.5,
+                    weatherScore:   isFinite(Number(wScore))   ? Number(wScore)   : 0.7,
+                    vesselAge:      isFinite(Number(vAge))      ? Number(vAge)     : 10,
+                    seasonIdx:      isFinite(Number(sIdx))      ? Number(sIdx)     : 2,
+                };
+            })
+            // Only rows where actualDelay was actually found and is a non-negative number
+            .filter(d => d.actualDelay !== null && d.actualDelay >= 0);
 
         if (cleanData.length < 5) {
-            console.warn('[Predictor] Insufficient data:', cleanData.length);
+            console.warn('[Predictor] Insufficient usable data after parsing:', cleanData.length,
+                'Available columns in row 0:', Object.keys(uploadedHistoricalData[0]).join(', '));
             return { mae: 0, rmse: 0, r2: 0 };
         }
+
+        // Guard: if every single delay is 0, the column wasn't found
+        const nonZeroCount = cleanData.filter(d => d.actualDelay > 0).length;
+        if (nonZeroCount === 0) {
+            console.error('[Predictor] All parsed actualDelay values are 0 — column key mismatch.' +
+                '\nAvailable columns:', Object.keys(uploadedHistoricalData[0]).join(', '));
+            return { mae: 0, rmse: 0, r2: 0 };
+        }
+
+        console.log(`[Predictor] Loaded ${cleanData.length} records | Non-zero delays: ${nonZeroCount}` +
+            ` | Range: ${Math.min(...cleanData.map(d => d.actualDelay))}–${Math.max(...cleanData.map(d => d.actualDelay))}h`);
 
         // Shuffle and split
         const shuffled  = [...cleanData].sort(() => Math.random() - 0.5);
@@ -276,7 +318,14 @@ export class DelayPredictor {
         const count      = testData.length || 1;
         const meanActual = avg(testData.map(r => r.actualDelay));
         let   tss        = testData.reduce((s, r) => s + (r.actualDelay - meanActual) ** 2, 0);
-        if (tss === 0) tss = 0.001;
+        // If tss is near 0, the test set has no variance — return mae only, don't fake r2
+        if (tss < 0.01) {
+            return {
+                mae:  Math.round((sumAbsErr / count) * 100) / 100,
+                rmse: Math.round(Math.sqrt(sumSqErr / count) * 100) / 100,
+                r2:   0,
+            };
+        }
 
         const mae  = sumAbsErr / count;
         const rmse = Math.sqrt(sumSqErr / count);

@@ -8,7 +8,7 @@ import { optimizeLogistics } from './engines/optimizer.js';
 import { renderKPIs, renderPageHeader, updateTimestamp } from './ui/dashboard.js';
 import {
     renderCostDoughnut, renderVesselTimeline, renderInventoryChart,
-    renderReliabilityGauge,
+    renderCostTrend, renderReliabilityGauge,
 } from './ui/charts.js';
 import { renderVesselTracker } from './ui/vessel-tracker.js';
 import { renderInventoryPanel } from './ui/inventory.js';
@@ -707,7 +707,10 @@ function renderOverviewPanel() {
         // 3. Inventory
         renderInventoryChart('inventoryAreaChart', appData.inventoryProjection || {});
 
-        // 4. Reliability gauge
+        // 4. Cost Trend
+        renderCostTrend('costTrendChart', dashboardSummary);
+
+        // 5. Reliability gauge
         const reliability = appData.isEmpty ? 0 : calculateSupplyReliability(appData.vessels, appData.inventory, activePredictions);
         const gaugeContainer = document.getElementById('reliabilityGauge');
         if (gaugeContainer) {
@@ -724,6 +727,70 @@ function setupNavigation() {
             }
         });
     });
+
+    // --- Briefing Mode (Presentation Overlay) Logic ---
+    const presentationBtn = document.getElementById('presentationBtn');
+    const overlay = document.getElementById('presentationOverlay');
+    const closeBtn = document.getElementById('closePresentationBtn');
+    const nextBtn = document.getElementById('nextSlideBtn');
+    const prevBtn = document.getElementById('prevSlideBtn');
+    const slideContent = document.getElementById('presentationSlideContent');
+    const counter = document.getElementById('slideCounter');
+
+    let currentSlide = 0;
+    const slides = [
+        { title: "Welcome to BharatSupply", content: "Your AI-Powered Logistics Control Tower.<br><br>Let's take a quick tour of how to use the platform." },
+        { title: "Step 1: Data Input", content: "Upload your historical Excel/CSV data or design your network manually using the visual Whiteboard.<br><br>The system extracts nodes, routes, and capacities automatically." },
+        { title: "Step 2: ML Prediction", content: "Run the XGBoost ML model to predict vessel delays.<br><br>Our AI considers weather, port congestion, and vessel age to forecast realistic ETAs." },
+        { title: "Step 3: MILP Optimization", content: "Run mathematical optimization to solve complex logistics.<br><br>The engine minimizes total freight & demurrage costs while ensuring plant inventory remains above safety stock." },
+        { title: "Step 4: Real-time Analytics", content: "Monitor everything from the Executive Dashboard.<br><br>Track costs, visualize inventory projections, and run What-If simulations to test disruptions." }
+    ];
+
+    function renderSlide(index) {
+        if (!slideContent) return;
+        const slide = slides[index];
+        slideContent.innerHTML = `
+            <div style="text-align:center; padding: 40px;">
+                <h2 style="font-size: 2.5rem; color: var(--text-primary); margin-bottom: 20px;">${slide.title}</h2>
+                <p style="font-size: 1.2rem; color: var(--text-muted); line-height: 1.6;">${slide.content}</p>
+            </div>
+        `;
+        if (counter) counter.textContent = `${index + 1} / ${slides.length}`;
+        if (prevBtn) prevBtn.disabled = index === 0;
+        if (nextBtn) nextBtn.disabled = index === slides.length - 1;
+    }
+
+    if (presentationBtn && overlay) {
+        presentationBtn.addEventListener('click', () => {
+            currentSlide = 0;
+            renderSlide(currentSlide);
+            overlay.classList.add('active');
+        });
+    }
+
+    if (closeBtn && overlay) {
+        closeBtn.addEventListener('click', () => {
+            overlay.classList.remove('active');
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                renderSlide(currentSlide);
+            }
+        });
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentSlide > 0) {
+                currentSlide--;
+                renderSlide(currentSlide);
+            }
+        });
+    }
 }
 
 export function showNotification(message, type = 'info') {

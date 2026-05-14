@@ -1,0 +1,301 @@
+Origin Distance,Season Idx,Vessel Age,Port Congestion,Weather Score,Origin,Port,Actual Delay
+28,1,3,0.51,0.72,Puerto Bolivar,paradip,24
+28,1,5,0.53,0.55,Puerto Bolivar,paradip,25
+12,1,5,0.51,0.7,Qinhuangdao,dhamra,24
+28,3,27,0.63,0.63,Puerto Bolivar,haldia,31
+20,0,20,0.34,0.78,Hay Point,haldia,28
+14,3,24,0.61,0.75,Richards Bay,paradip,24
+18,1,8,0.51,0.63,Newcastle,vizag,20
+20,0,26,0.29,0.81,Hay Point,vizag,25
+28,0,29,0.4,0.81,Puerto Bolivar,haldia,27
+10,1,5,0.69,0.75,Maputo,paradip,17
+14,3,2,0.51,0.72,Richards Bay,haldia,17
+12,1,26,0.65,0.57,Qinhuangdao,vizag,30
+20,3,22,0.37,0.62,Hay Point,dhamra,24
+28,2,24,0.67,0.46,Puerto Bolivar,dhamra,65
+28,1,12,0.53,0.59,Puerto Bolivar,dhamra,21
+18,2,8,0.89,0.39,Newcastle,paradip,83
+14,2,12,0.74,0.35,Richards Bay,paradip,71
+10,3,11,0.5,0.64,Maputo,vizag,12
+28,0,17,0.59,0.84,Puerto Bolivar,haldia,27
+18,1,3,0.64,0.76,Newcastle,vizag,17
+18,1,12,0.57,0.7,Newcastle,dhamra,20
+14,1,12,0.64,0.62,Richards Bay,vizag,16
+18,3,17,0.36,0.6,Newcastle,paradip,11
+20,0,3,0.41,0.88,Hay Point,paradip,17
+12,0,19,0.5,0.87,Qinhuangdao,dhamra,24
+14,2,10,0.57,0.44,Richards Bay,dhamra,50
+12,0,22,0.46,0.83,Qinhuangdao,dhamra,30
+18,2,7,0.87,0.48,Newcastle,haldia,81
+10,0,13,0.43,0.9,Maputo,vizag,33
+28,0,12,0.53,0.87,Puerto Bolivar,paradip,15
+10,2,1,0.89,0.42,Maputo,dhamra,100
+20,1,13,0.52,0.57,Hay Point,dhamra,20
+14,3,22,0.5,0.8,Richards Bay,paradip,29
+12,2,18,0.58,0.23,Qinhuangdao,vizag,54
+22,1,29,0.65,0.58,Murmansk,vizag,37
+18,0,12,0.39,0.88,Newcastle,vizag,3
+22,2,24,0.6,0.31,Murmansk,haldia,70
+10,0,16,0.29,0.72,Maputo,paradip,19
+18,0,27,0.42,0.96,Newcastle,paradip,16
+10,1,11,0.58,0.72,Maputo,dhamra,16
+22,1,27,0.49,0.69,Murmansk,dhamra,30
+18,2,5,0.63,0.28,Newcastle,dhamra,78
+20,2,15,0.82,0.25,Hay Point,vizag,64
+20,1,23,0.44,0.82,Hay Point,vizag,24
+10,1,22,0.63,0.73,Maputo,vizag,32
+12,0,6,0.26,0.9,Qinhuangdao,haldia,15
+20,3,27,0.32,0.76,Hay Point,paradip,24
+18,1,3,0.35,0.63,Newcastle,dhamra,21
+18,2,23,0.63,0.4,Newcastle,haldia,76
+22,0,24,0.51,0.74,Murmansk,vizag,25
+22,2,5,0.77,0.45,Murmansk,vizag,88
+18,3,3,0.34,0.8,Newcastle,dhamra,24
+10,1,27,0.45,0.73,Maputo,vizag,16
+22,1,29,0.59,0.66,Murmansk,vizag,38
+14,3,6,0.6,0.66,Richards Bay,vizag,9
+10,0,4,0.45,0.79,Maputo,haldia,20
+22,2,9,0.84,0.27,Murmansk,dhamra,72
+14,1,9,0.46,0.83,Richards Bay,paradip,19
+10,1,13,0.5,0.62,Maputo,vizag,15
+22,2,29,0.63,0.28,Murmansk,dhamra,55
+12,0,22,0.52,0.93,Qinhuangdao,dhamra,22
+28,0,20,0.46,0.83,Puerto Bolivar,dhamra,25
+20,2,23,0.89,0.45,Hay Point,dhamra,80
+14,3,24,0.52,0.61,Richards Bay,haldia,27
+12,2,17,0.55,0.3,Qinhuangdao,haldia,45
+20,3,15,0.42,0.69,Hay Point,paradip,20
+12,0,19,0.47,0.78,Qinhuangdao,haldia,15
+28,2,17,0.59,0.47,Puerto Bolivar,dhamra,76
+12,1,3,0.5,0.57,Qinhuangdao,vizag,36
+14,0,8,0.5,0.84,Richards Bay,vizag,29
+12,3,11,0.3,0.72,Qinhuangdao,paradip,26
+22,0,29,0.46,0.94,Murmansk,dhamra,40
+12,2,8,0.84,0.21,Qinhuangdao,vizag,63
+18,1,25,0.37,0.57,Newcastle,dhamra,40
+18,3,9,0.59,0.67,Newcastle,dhamra,11
+18,1,8,0.4,0.67,Newcastle,haldia,14
+12,2,12,0.62,0.23,Qinhuangdao,vizag,70
+28,3,26,0.35,0.76,Puerto Bolivar,vizag,40
+14,3,24,0.51,0.74,Richards Bay,dhamra,24
+10,1,3,0.67,0.82,Maputo,vizag,16
+22,3,11,0.4,0.71,Murmansk,dhamra,23
+14,0,23,0.35,0.7,Richards Bay,dhamra,19
+14,2,9,0.77,0.21,Richards Bay,paradip,62
+18,1,20,0.38,0.7,Newcastle,vizag,38
+14,2,23,0.82,0.46,Richards Bay,paradip,82
+10,1,19,0.53,0.85,Maputo,vizag,34
+10,3,16,0.55,0.68,Maputo,haldia,16
+22,3,19,0.41,0.71,Murmansk,dhamra,35
+18,1,28,0.67,0.83,Newcastle,dhamra,14
+10,3,27,0.58,0.65,Maputo,haldia,39
+18,2,17,0.56,0.27,Newcastle,vizag,70
+12,2,4,0.57,0.37,Qinhuangdao,paradip,58
+10,3,17,0.46,0.61,Maputo,haldia,16
+18,3,28,0.56,0.73,Newcastle,haldia,34
+18,2,6,0.56,0.41,Newcastle,dhamra,63
+14,1,24,0.58,0.67,Richards Bay,dhamra,30
+22,0,19,0.36,0.93,Murmansk,haldia,44
+18,1,8,0.4,0.56,Newcastle,paradip,6
+14,3,15,0.62,0.65,Richards Bay,paradip,8
+20,1,11,0.65,0.73,Hay Point,dhamra,22
+10,0,9,0.59,0.78,Maputo,haldia,18
+10,0,20,0.34,0.77,Maputo,dhamra,33
+20,3,25,0.35,0.7,Hay Point,paradip,36
+22,1,17,0.56,0.78,Murmansk,dhamra,19
+14,2,9,0.6,0.53,Richards Bay,haldia,43
+28,3,9,0.52,0.69,Puerto Bolivar,vizag,23
+22,0,9,0.45,0.75,Murmansk,haldia,18
+22,3,20,0.4,0.65,Murmansk,dhamra,27
+28,1,3,0.67,0.83,Puerto Bolivar,dhamra,14
+28,0,10,0.47,0.92,Puerto Bolivar,vizag,32
+22,0,12,0.52,0.88,Murmansk,vizag,32
+22,0,3,0.54,0.73,Murmansk,dhamra,19
+14,1,3,0.43,0.73,Richards Bay,paradip,34
+28,2,17,0.6,0.44,Puerto Bolivar,paradip,76
+22,1,18,0.5,0.62,Murmansk,paradip,19
+14,3,12,0.51,0.61,Richards Bay,vizag,21
+22,0,10,0.42,0.95,Murmansk,dhamra,18
+14,0,5,0.59,0.74,Richards Bay,haldia,12
+10,1,19,0.68,0.69,Maputo,haldia,24
+12,2,22,0.87,0.23,Qinhuangdao,vizag,101
+12,0,21,0.32,0.95,Qinhuangdao,vizag,37
+10,1,12,0.65,0.61,Maputo,haldia,23
+14,0,23,0.54,0.86,Richards Bay,haldia,25
+22,2,22,0.74,0.46,Murmansk,vizag,102
+14,3,2,0.37,0.6,Richards Bay,haldia,19
+22,1,5,0.66,0.8,Murmansk,dhamra,31
+28,3,7,0.48,0.61,Puerto Bolivar,paradip,27
+14,2,26,0.6,0.33,Richards Bay,haldia,67
+28,0,23,0.36,0.93,Puerto Bolivar,paradip,24
+20,0,7,0.45,0.79,Hay Point,paradip,17
+18,2,12,0.76,0.24,Newcastle,vizag,71
+14,2,12,0.84,0.54,Richards Bay,dhamra,44
+10,1,17,0.61,0.57,Maputo,dhamra,12
+10,2,3,0.85,0.34,Maputo,haldia,92
+28,0,11,0.54,0.73,Puerto Bolivar,haldia,16
+10,2,12,0.79,0.2,Maputo,vizag,72
+28,1,9,0.45,0.76,Puerto Bolivar,dhamra,32
+20,0,2,0.54,0.9,Hay Point,vizag,19
+18,1,27,0.64,0.7,Newcastle,haldia,21
+14,3,1,0.6,0.63,Richards Bay,paradip,15
+22,0,2,0.47,0.8,Murmansk,vizag,11
+12,0,12,0.38,0.94,Qinhuangdao,paradip,14
+10,2,10,0.9,0.39,Maputo,haldia,87
+14,0,19,0.54,0.97,Richards Bay,vizag,23
+10,1,29,0.61,0.67,Maputo,dhamra,35
+20,2,21,0.86,0.25,Hay Point,dhamra,76
+12,1,11,0.69,0.59,Qinhuangdao,vizag,27
+20,2,14,0.81,0.51,Hay Point,haldia,41
+10,1,14,0.52,0.64,Maputo,vizag,20
+22,0,18,0.3,0.93,Murmansk,haldia,36
+20,2,22,0.57,0.3,Hay Point,haldia,80
+20,3,11,0.5,0.62,Hay Point,haldia,3
+22,2,7,0.61,0.51,Murmansk,vizag,41
+18,1,28,0.68,0.84,Newcastle,haldia,33
+14,0,22,0.26,0.94,Richards Bay,vizag,11
+20,2,23,0.79,0.43,Hay Point,paradip,62
+22,3,25,0.59,0.7,Murmansk,dhamra,36
+14,3,16,0.36,0.64,Richards Bay,haldia,12
+28,0,26,0.31,0.71,Puerto Bolivar,dhamra,20
+10,1,5,0.58,0.66,Maputo,paradip,20
+18,3,3,0.36,0.73,Newcastle,vizag,9
+10,0,11,0.35,0.79,Maputo,dhamra,19
+18,1,12,0.68,0.8,Newcastle,haldia,25
+22,1,15,0.54,0.61,Murmansk,paradip,26
+22,3,6,0.62,0.68,Murmansk,haldia,16
+20,2,7,0.88,0.22,Hay Point,haldia,79
+28,0,29,0.27,0.77,Puerto Bolivar,vizag,31
+12,0,22,0.4,0.9,Qinhuangdao,haldia,23
+20,3,15,0.44,0.69,Hay Point,paradip,14
+22,0,1,0.45,0.84,Murmansk,vizag,15
+22,2,14,0.84,0.26,Murmansk,haldia,89
+22,1,2,0.67,0.74,Murmansk,dhamra,28
+20,3,11,0.45,0.63,Hay Point,haldia,23
+12,0,13,0.38,0.73,Qinhuangdao,paradip,12
+28,0,14,0.31,0.83,Puerto Bolivar,haldia,5
+22,1,20,0.36,0.77,Murmansk,haldia,25
+28,3,14,0.63,0.61,Puerto Bolivar,haldia,29
+14,0,23,0.56,0.75,Richards Bay,dhamra,18
+20,3,3,0.3,0.64,Hay Point,haldia,7
+10,1,22,0.49,0.62,Maputo,haldia,41
+28,3,8,0.38,0.74,Puerto Bolivar,dhamra,35
+20,2,4,0.73,0.32,Hay Point,vizag,62
+20,2,5,0.61,0.42,Hay Point,haldia,47
+20,2,26,0.86,0.21,Hay Point,haldia,72
+10,1,21,0.55,0.7,Maputo,dhamra,21
+28,0,1,0.52,0.86,Puerto Bolivar,paradip,23
+14,1,7,0.58,0.64,Richards Bay,haldia,23
+10,3,25,0.37,0.63,Maputo,vizag,13
+14,3,21,0.34,0.67,Richards Bay,dhamra,17
+10,2,10,0.72,0.55,Maputo,vizag,55
+12,0,25,0.4,0.91,Qinhuangdao,vizag,24
+12,0,17,0.52,0.91,Qinhuangdao,dhamra,21
+18,0,15,0.57,0.7,Newcastle,dhamra,10
+18,3,14,0.3,0.66,Newcastle,dhamra,18
+10,2,26,0.87,0.24,Maputo,vizag,61
+10,3,6,0.58,0.72,Maputo,vizag,21
+12,1,3,0.5,0.78,Qinhuangdao,paradip,30
+10,2,1,0.83,0.24,Maputo,haldia,89
+14,3,12,0.44,0.7,Richards Bay,dhamra,17
+10,0,3,0.52,0.77,Maputo,paradip,9
+12,1,25,0.54,0.81,Qinhuangdao,haldia,32
+22,3,15,0.56,0.67,Murmansk,dhamra,23
+10,3,11,0.59,0.64,Maputo,haldia,21
+22,3,15,0.31,0.67,Murmansk,dhamra,35
+22,0,13,0.58,0.92,Murmansk,dhamra,22
+18,3,16,0.44,0.73,Newcastle,vizag,13
+28,3,12,0.58,0.68,Puerto Bolivar,haldia,40
+10,0,16,0.31,0.96,Maputo,haldia,5
+14,2,18,0.57,0.47,Richards Bay,vizag,64
+28,1,11,0.62,0.76,Puerto Bolivar,paradip,17
+10,3,12,0.34,0.71,Maputo,dhamra,19
+20,1,21,0.47,0.78,Hay Point,haldia,31
+28,2,6,0.72,0.37,Puerto Bolivar,paradip,89
+28,2,24,0.89,0.24,Puerto Bolivar,dhamra,101
+10,2,28,0.81,0.33,Maputo,paradip,107
+18,2,25,0.69,0.44,Newcastle,vizag,60
+18,1,26,0.4,0.66,Newcastle,dhamra,24
+12,0,13,0.54,0.98,Qinhuangdao,haldia,16
+28,1,16,0.65,0.69,Puerto Bolivar,vizag,25
+18,1,9,0.57,0.79,Newcastle,haldia,13
+28,3,5,0.35,0.62,Puerto Bolivar,haldia,28
+28,1,29,0.41,0.78,Puerto Bolivar,vizag,31
+14,3,29,0.43,0.63,Richards Bay,vizag,36
+28,0,2,0.34,0.92,Puerto Bolivar,dhamra,30
+18,0,21,0.56,0.91,Newcastle,vizag,25
+14,1,15,0.47,0.74,Richards Bay,vizag,18
+10,2,5,0.83,0.22,Maputo,haldia,79
+10,3,26,0.51,0.74,Maputo,paradip,27
+20,2,13,0.8,0.47,Hay Point,haldia,78
+18,1,5,0.69,0.61,Newcastle,haldia,17
+12,2,18,0.61,0.34,Qinhuangdao,haldia,55
+10,3,8,0.59,0.74,Maputo,vizag,12
+20,2,16,0.79,0.26,Hay Point,vizag,91
+18,1,3,0.55,0.66,Newcastle,dhamra,27
+14,0,10,0.48,0.82,Richards Bay,haldia,9
+22,3,18,0.34,0.78,Murmansk,dhamra,15
+22,1,20,0.67,0.73,Murmansk,dhamra,36
+22,0,20,0.56,0.81,Murmansk,haldia,39
+22,3,9,0.53,0.66,Murmansk,dhamra,20
+20,1,14,0.5,0.8,Hay Point,vizag,26
+10,0,16,0.52,0.89,Maputo,haldia,22
+12,1,21,0.59,0.75,Qinhuangdao,haldia,20
+20,0,17,0.57,0.89,Hay Point,paradip,6
+20,3,23,0.42,0.65,Hay Point,paradip,28
+28,3,14,0.61,0.79,Puerto Bolivar,paradip,36
+20,0,7,0.43,0.83,Hay Point,haldia,17
+14,1,11,0.44,0.66,Richards Bay,vizag,18
+18,3,15,0.62,0.66,Newcastle,vizag,9
+12,2,23,0.72,0.53,Qinhuangdao,dhamra,63
+12,2,26,0.76,0.33,Qinhuangdao,vizag,87
+10,2,4,0.62,0.5,Maputo,paradip,80
+10,3,11,0.53,0.64,Maputo,paradip,18
+12,2,20,0.79,0.54,Qinhuangdao,dhamra,56
+22,0,7,0.58,0.71,Murmansk,paradip,27
+14,2,28,0.71,0.39,Richards Bay,haldia,99
+18,2,22,0.82,0.33,Newcastle,paradip,97
+12,0,22,0.53,0.85,Qinhuangdao,haldia,20
+20,0,25,0.49,0.77,Hay Point,vizag,38
+14,0,7,0.35,0.7,Richards Bay,paradip,8
+14,1,4,0.55,0.76,Richards Bay,dhamra,24
+10,0,14,0.32,0.71,Maputo,paradip,1
+14,2,22,0.66,0.46,Richards Bay,dhamra,79
+28,2,11,0.74,0.25,Puerto Bolivar,vizag,73
+18,1,29,0.35,0.82,Newcastle,dhamra,33
+22,2,25,0.67,0.24,Murmansk,vizag,64
+20,0,15,0.55,0.87,Hay Point,vizag,26
+22,0,3,0.27,0.75,Murmansk,paradip,16
+20,1,2,0.53,0.62,Hay Point,vizag,17
+14,1,26,0.41,0.69,Richards Bay,dhamra,39
+18,1,19,0.43,0.63,Newcastle,dhamra,22
+20,1,11,0.61,0.81,Hay Point,vizag,6
+28,0,7,0.45,0.9,Puerto Bolivar,vizag,24
+28,3,19,0.43,0.67,Puerto Bolivar,haldia,39
+12,3,20,0.33,0.72,Qinhuangdao,haldia,27
+12,1,15,0.36,0.74,Qinhuangdao,haldia,24
+22,1,12,0.52,0.61,Murmansk,paradip,20
+20,0,14,0.44,0.83,Hay Point,vizag,7
+28,2,25,0.8,0.4,Puerto Bolivar,haldia,93
+14,1,22,0.67,0.56,Richards Bay,vizag,43
+10,0,1,0.42,0.87,Maputo,vizag,19
+18,3,1,0.33,0.72,Newcastle,dhamra,17
+14,2,21,0.62,0.42,Richards Bay,paradip,71
+10,0,11,0.35,0.83,Maputo,dhamra,8
+18,0,7,0.25,0.75,Newcastle,vizag,5
+14,3,8,0.62,0.7,Richards Bay,paradip,14
+10,1,5,0.39,0.78,Maputo,vizag,22
+10,2,21,0.69,0.4,Maputo,paradip,57
+12,0,2,0.5,0.83,Qinhuangdao,paradip,9
+18,3,27,0.45,0.77,Newcastle,haldia,21
+12,0,9,0.43,0.88,Qinhuangdao,paradip,18
+14,1,8,0.67,0.78,Richards Bay,vizag,34
+20,1,26,0.36,0.79,Hay Point,vizag,32
+10,2,28,0.68,0.52,Maputo,haldia,44
+14,1,18,0.63,0.68,Richards Bay,dhamra,13
+22,1,22,0.43,0.81,Murmansk,dhamra,36
+20,1,10,0.44,0.78,Hay Point,vizag,7
+22,0,26,0.5,0.79,Murmansk,paradip,44
+14,2,2,0.85,0.44,Richards Bay,dhamra,78
+20,0,18,0.28,0.89,Hay Point,dhamra,18
+18,0,5,0.34,0.96,Newcastle,haldia,8
